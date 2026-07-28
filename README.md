@@ -25,10 +25,10 @@ ResuMatch 是一个 **Local-first** 的招聘辅助工作台：Chrome 扩展只�
 - 在后台创建非激活搜索标签页，按职位、城市与页数执行批量采集。
 - 在**职位预览 → 更多信息 → 公司基本信息**的明确路径中核验公司规模；未核验时保留 `unverified`，不从 JD 或卡片全文猜测人数。
 - 基于标题、薪资与关键词进行硬筛选；公司规模与地点仅作为软偏好，工作年限不是硬门槛。
-- 本地或远程 Worker 评估岗位、生成问候语草稿与分析 HR 入站消息。
+- 默认由本地 Worker 评估岗位、生成问候语草稿与分析 HR 入站消息；云端 AI 必须显式开启。
 - 历史聊天低频扫描、单会话失败隔离、稳定去重、按入站 HR 消息记录首个事件。
 - 维护候选状态：`queued/paused → applied → interested → interview`；人工覆盖不会被自动同步回退。
-- 提供匿名、可关闭的运行状态遥测。
+- 提供默认关闭、可选择开启的匿名运行状态遥测。
 
 ### 明确不做
 
@@ -46,14 +46,30 @@ ResuMatch 是一个 **Local-first** 的招聘辅助工作台：Chrome 扩展只�
 
 ### 启动本地工作台
 
+先在 Chrome Web Store 创建扩展草稿并取得**正式扩展 ID**。然后生成每台电脑独立的本机 Token；`.env` 不应提交到版本控制。
+
 ```powershell
+npm install
+npm run config:create -- -ExtensionId "你的正式扩展 ID"
+.\Start-Workbench.ps1
+```
+
+脚本会创建 `.env` 并显示 Token。将该 Token 分别填入工作台首次弹出的 Token 窗口与扩展弹窗的“工作台 Token”字段。
+
+若要以命令行方式启动，也可设置环境变量后运行：
+
+```powershell
+$env:WORKBENCH_EXTENSION_IDS = "你的正式扩展 ID"
+$env:WORKBENCH_API_TOKEN = "至少 32 字符的随机 Token"
 npm install
 npm start
 ```
 
+服务会在任一安全配置缺失时拒绝启动。
+
 打开 [http://127.0.0.1:8788](http://127.0.0.1:8788)。启动器会等待 `GET /api/system/version` 可用；扩展自身不是本地服务健康检查。
 
-### 加载扩展
+### 开发环境加载扩展
 
 1. 打开 `chrome://extensions`。
 2. 开启“开发者模式”。
@@ -62,6 +78,16 @@ npm start
 5. 在已正常登录的 Boss 页面或本地工作台中使用扩展。
 
 扩展文件变更后，请在 `chrome://extensions` 重新加载扩展，并刷新已打开的 Boss/工作台标签页，避免旧 content script 的扩展上下文失效。
+
+### Chrome Web Store 发布与客户安装
+
+1. 在 Chrome Web Store Developer Dashboard 首次上传 `npm run extension:package` 生成的 `dist/resumatch-extension.zip`，先保存为私有草稿或不公开发布。
+2. 记录 Dashboard 分配的正式扩展 ID；该 ID 是本地服务白名单的一部分，不能用开发者模式的临时 ID 替代。
+3. 用正式扩展 ID 为每位客户电脑执行 `npm run config:create -- -ExtensionId "..."`，并让客户保管输出的 Token。
+4. 客户从 Chrome Web Store 安装扩展，首次打开扩展弹窗后粘贴该 Token；打开本地工作台时也粘贴同一 Token。
+5. 客户在正常登录的 Boss 页面发起检索；系统仅生成岗位候选与问候语草稿，客户自行审核并决定是否发送。
+
+发布 ZIP 只包含扩展运行所需文件与 PNG 图标；不会包含数据库、日志、诊断截图、`.env` 或 Chrome 调试配置。
 
 ## 系统架构
 

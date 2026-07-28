@@ -1,4 +1,6 @@
-export const TELEMETRY_ENDPOINT = "https://telemetry.example.invalid/events";
+// Keep this empty in release builds. Telemetry cannot send until a real HTTPS
+// endpoint is intentionally configured and the user enables it.
+export const TELEMETRY_ENDPOINT = "";
 
 const EVENT_PROPERTIES = {
   app_launched: ["extension_version"],
@@ -48,7 +50,16 @@ export async function trackDailyLaunch() {
 
 async function isTelemetryEnabled() {
   const { telemetry_enabled: enabled } = await chrome.storage.local.get("telemetry_enabled");
-  return enabled !== false;
+  return enabled === true && isValidTelemetryEndpoint(TELEMETRY_ENDPOINT);
+}
+
+function isValidTelemetryEndpoint(value) {
+  try {
+    const endpoint = new URL(value);
+    return endpoint.protocol === "https:" && Boolean(endpoint.hostname);
+  } catch {
+    return false;
+  }
 }
 
 async function getDeviceId() {

@@ -8,9 +8,10 @@ const backgroundScript = fs.readFileSync(path.join(process.cwd(), "browser-exten
 const popupScript = fs.readFileSync(path.join(process.cwd(), "browser-extension", "popup.js"), "utf8");
 const telemetryScript = fs.readFileSync(path.join(process.cwd(), "browser-extension", "telemetry.js"), "utf8");
 
-test("telemetry only accepts allowlisted anonymous properties and respects opt-out", () => {
+test("telemetry is disabled by default and only accepts allowlisted anonymous properties", () => {
   assert.match(telemetryScript, /const EVENT_PROPERTIES/);
-  assert.match(telemetryScript, /return enabled !== false/);
+  assert.match(telemetryScript, /export const TELEMETRY_ENDPOINT = ""/);
+  assert.match(telemetryScript, /return enabled === true && isValidTelemetryEndpoint/);
   assert.match(telemetryScript, /crypto\.randomUUID\(\)/);
   assert.match(telemetryScript, /method: "POST"/);
   assert.match(telemetryScript, /keys\.some\(\(key\) => !allowedProperties\.includes\(key\)\)/);

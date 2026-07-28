@@ -2,8 +2,6 @@ import { analyzeMessagesLocally, evaluateLocally, generateGreetingsLocally } fro
 import { REPLY_INTENTS } from "./intents.js";
 import { classifyInboundMessage } from "./messageClassifier.js";
 
-const DEFAULT_ENDPOINT = "https://resumatch-gateway.hamhome-680ce447.workers.dev";
-const DEFAULT_ORIGIN = "https://resumatch-7cv.pages.dev";
 let remoteWorkerUnavailableUntil = 0;
 
 export async function evaluateJob(job, userProfile = {}) {
@@ -43,13 +41,18 @@ export async function generateGreetings(job, reportContext = {}, userProfile = {
 }
 
 export async function callWorker(payload, context = {}) {
+  // Local-first is the default: job descriptions, resumes and conversations
+  // stay on this machine unless an operator explicitly enables a HTTPS worker.
+  if (!isCloudAiExplicitlyEnabled()) {
+    return runLocalFallback(payload, context);
+  }
+
   if (Date.now() < remoteWorkerUnavailableUntil) {
     return runLocalFallback(payload, context, new Error("remote worker temporarily disabled"));
   }
 
-  const endpoint = process.env.RESUMATCH_ENDPOINT || DEFAULT_ENDPOINT;
+  const endpoint = process.env.RESUMATCH_ENDPOINT;
   const headers = {
-    Origin: process.env.RESUMATCH_ORIGIN || DEFAULT_ORIGIN,
     "Content-Type": "application/json"
   };
   if (process.env.ADMIN_BYPASS_TOKEN) {
@@ -73,6 +76,16 @@ export async function callWorker(payload, context = {}) {
   } catch (error) {
     remoteWorkerUnavailableUntil = Date.now() + 5 * 60 * 1000;
     return runLocalFallback(payload, context, error);
+  }
+}
+
+function isCloudAiExplicitlyEnabled() {
+  if (process.env.ENABLE_CLOUD_AI !== "true") return false;
+  try {
+    const endpoint = new URL(String(process.env.RESUMATCH_ENDPOINT || ""));
+    return endpoint.protocol === "https:" && Boolean(endpoint.hostname);
+  } catch {
+    return false;
   }
 }
 

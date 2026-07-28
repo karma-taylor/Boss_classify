@@ -1,6 +1,9 @@
 ﻿$ErrorActionPreference = "Stop"
 
 $appDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$envLoader = Join-Path $appDir "scripts\Import-WorkbenchEnv.ps1"
+. $envLoader
+Import-WorkbenchEnvironment -AppDirectory $appDir
 $port = 8788
 $appUrl = "http://127.0.0.1:$port"
 $logsDir = Join-Path $appDir "logs"
@@ -9,7 +12,7 @@ $errorLog = Join-Path $logsDir "workbench-error.log"
 
 function Test-WorkbenchReady {
   try {
-    $response = Invoke-RestMethod "$appUrl/api/system/version" -TimeoutSec 2
+    $response = Invoke-RestMethod "$appUrl/api/system/version" -Headers @{ "X-Workbench-Token" = $env:WORKBENCH_API_TOKEN } -TimeoutSec 2
     return [bool]$response.version
   } catch {
     return $false

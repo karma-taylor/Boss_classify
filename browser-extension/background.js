@@ -7,6 +7,7 @@ const REPLY_SUMMARY_URL = "http://127.0.0.1:8788/api/replies/summary";
 const HISTORY_SUMMARY_URL = "http://127.0.0.1:8788/api/replies/history-summary";
 const MAX_HISTORY_CONVERSATIONS = 200;
 const MAX_COMPANY_SIZE_DETAIL_TABS = 20;
+const WORKBENCH_TOKEN_STORAGE_KEY = "workbench_api_token";
 
 let activeSearchRun = null;
 let activeHistoryRun = null;
@@ -983,7 +984,11 @@ function normalizeCityName(value) {
 }
 
 async function fetchJson(url, options) {
-  const response = await fetch(url, options);
+  const { [WORKBENCH_TOKEN_STORAGE_KEY]: token } = await chrome.storage.local.get(WORKBENCH_TOKEN_STORAGE_KEY);
+  if (!token) throw new Error("workbench_token_missing");
+  const headers = new Headers(options?.headers || {});
+  headers.set("X-Workbench-Token", token);
+  const response = await fetch(url, { ...options, headers });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
     throw new Error(payload.error || `Request failed: ${response.status}`);

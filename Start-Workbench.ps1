@@ -1,6 +1,9 @@
 ﻿$ErrorActionPreference = "Stop"
 
 $appDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$envLoader = Join-Path $appDir "scripts\Import-WorkbenchEnv.ps1"
+. $envLoader
+Import-WorkbenchEnvironment -AppDirectory $appDir
 $serverScript = Join-Path $appDir "Start-WorkbenchServer.ps1"
 $appUrl = "http://127.0.0.1:8788"
 
@@ -19,7 +22,7 @@ try {
 $deadline = (Get-Date).AddSeconds(20)
 while ((Get-Date) -lt $deadline) {
   try {
-    $response = Invoke-RestMethod "$appUrl/api/system/version" -TimeoutSec 2
+    $response = Invoke-RestMethod "$appUrl/api/system/version" -Headers @{ "X-Workbench-Token" = $env:WORKBENCH_API_TOKEN } -TimeoutSec 2
     if ($response.version) {
       Start-Process $appUrl
       exit 0

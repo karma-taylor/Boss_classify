@@ -4,8 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ResuMatch 投递控制台</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <link rel="stylesheet" href="/vendor/tailwind.css" />
+    <script src="/vendor/vue.js"></script>
     <style>
       :root {
         --ink: #18212f;
@@ -39,6 +39,15 @@
   </head>
   <body>
     <div id="app" class="mx-auto min-h-screen max-w-[1480px] px-4 py-4 md:px-6">
+      <div v-if="tokenRequired" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
+        <form class="w-full max-w-md rounded-lg bg-white p-6 shadow-xl" @submit.prevent="saveWorkbenchToken">
+          <h2 class="text-lg font-bold">需要工作台 Token</h2>
+          <p class="mt-2 text-sm text-slate-600">请输入启动服务时配置的 WORKBENCH_API_TOKEN。</p>
+          <input v-model="workbenchToken" type="password" autocomplete="off" class="mt-4 w-full rounded border p-2" />
+          <p v-if="tokenError" class="mt-2 text-sm text-rose-700">{{ tokenError }}</p>
+          <button class="mt-4 rounded bg-blue-600 px-4 py-2 font-bold text-white" type="submit">保存并重试</button>
+        </form>
+      </div>
       <header class="mb-4 grid gap-4 lg:grid-cols-[1fr_420px]">
         <section class="panel overflow-hidden">
           <div class="flex">
@@ -522,7 +531,10 @@
             messageJob: null,
             conversationText: "",
             analysis: "",
-            dossier: null
+            dossier: null,
+            workbenchToken: localStorage.getItem("WORKBENCH_API_TOKEN") || "",
+            tokenRequired: false,
+            tokenError: ""
           };
         },
         computed: {
@@ -558,7 +570,9 @@
           this.loadPreferences();
           this.loadCurrentSearchBatch();
           window.addEventListener("message", this.handleExtensionEvent);
-          await this.refreshAll();
+          await this.refreshAll().catch((error) => {
+            this.notice = error.message || "无法读取工作台数据";
+          });
           this.refreshTimer = window.setInterval(() => {
             this.refreshAll().catch(() => {});
           }, 10000);
@@ -571,9 +585,12 @@
         },
         methods: {
           async api(path, options) {
+            const headers = new Headers(options?.headers || {});
+            headers.set("Content-Type", "application/json");
+            headers.set("X-Workbench-Token", this.workbenchToken);
             const response = await fetch(path, {
-              headers: { "Content-Type": "application/json" },
-              ...options
+              ...options,
+              headers
             });
             const contentType = response.headers.get("content-type") || "";
             const text = await response.text();
@@ -582,9 +599,23 @@
             }
             const data = JSON.parse(text);
             if (!response.ok) {
+              if (response.status === 401 || response.status === 403) {
+                this.tokenRequired = true;
+                this.tokenError = "Token 缺失或不正确。";
+              }
               throw new Error(data.error || "请求失败");
             }
             return Array.isArray(data.value) ? data.value : data;
+          },
+          async saveWorkbenchToken() {
+            localStorage.setItem("WORKBENCH_API_TOKEN", this.workbenchToken.trim());
+            this.workbenchToken = this.workbenchToken.trim();
+            this.tokenRequired = false;
+            this.tokenError = "";
+            await this.refreshAll().catch(() => {
+              this.tokenRequired = true;
+              this.tokenError = "Token 不正确。";
+            });
           },
           async refreshAll() {
             const [metrics, jobs, plan, candidates, replies, replySummary] = await Promise.all([
@@ -821,8 +852,21 @@
               this.notice = `读取投递档案失败：${error.message}`;
             }
           },
-          downloadArchive() {
-            window.location.assign("/api/export/portable");
+          async downloadArchive() {
+            const response = await fetch("/api/export/portable", {
+              headers: { "X-Workbench-Token": this.workbenchToken }
+            });
+            if (!response.ok) {
+              this.tokenRequired = true;
+              this.tokenError = "Token 缺失或不正确。";
+              return;
+            }
+            const blob = await response.blob();
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = "resumatch-workbench-export.json";
+            link.click();
+            URL.revokeObjectURL(link.href);
           },
           async ignore(item) {
             await this.api(`/api/applications/${this.applicationId(item)}/ignore`, { method: "POST", body: "{}" });

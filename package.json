@@ -9,10 +9,16 @@
   "scripts": {
     "start": "node src/server.js",
     "test": "node --test tests/*.test.js",
-    "test:visual": "node tests/visual-smoke.mjs"
+    "test:visual": "node tests/visual-smoke.mjs",
+    "vendor:download": "node scripts/download-vendor-assets.mjs",
+    "extension:package": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-extension.ps1",
+    "config:create": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/New-WorkbenchConfig.ps1"
   },
   "dependencies": {
     "express": "^4.19.2",
     "playwright": "^1.45.3"
+  },
+  "overrides": {
+    "body-parser": "1.20.6"
   }
 }

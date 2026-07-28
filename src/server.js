@@ -44,9 +44,13 @@ import { analyzeMessages, evaluateJob, generateGreetings } from "./workerClient.
 import { applyMessageAnalysis, buildTomorrowPlan, getPlan, overrideReplyIntent } from "./strategy.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const port = Number(process.env.PORT || 8788);
+const WORKBENCH_TOKEN_HEADER = "x-workbench-token";
+const workbenchApiToken = requireWorkbenchApiToken();
+const trustedExtensionOrigins = new Set(readExtensionIds().map((id) => `chrome-extension://${id}`));
+const trustedUiOrigins = new Set([`http://127.0.0.1:${port}`]);
 const app = express();
 const db = openDb();
-const port = Number(process.env.PORT || 8788);
 const appVersion = "2026-07-28-reply-events";
 const HANDOFF_SCHEMA = "resumatch-tailor-package/v1";
 const TAILOR_MANIFEST_SCHEMA = "resume-tailor-manifest/v1";
@@ -58,15 +62,18 @@ normalizeStoredJobs(db);
 app.use("/api", (req, res, next) => {
   const origin = req.get("Origin");
   if (origin && !isTrustedApiOrigin(origin)) {
-    return res.status(403).json({ error: "仅允许本机工作台或已安装的浏览器扩展访问 API。" });
+    return res.status(403).json({ error: "forbidden_origin" });
   }
   if (origin) {
     res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Vary", "Origin");
   }
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Workbench-Token");
   if (req.method === "OPTIONS") return res.status(204).end();
+  if (!tokensMatch(req.get(WORKBENCH_TOKEN_HEADER), workbenchApiToken)) {
+    return res.status(403).json({ error: "forbidden_token" });
+  }
   return next();
 });
 
@@ -589,11 +596,39 @@ function parseStoredJson(value) {
 
 function isTrustedUiOrigin(origin) {
   if (!origin) return true;
-  return origin === `http://127.0.0.1:${port}` || origin === `http://localhost:${port}`;
+  if (trustedUiOrigins.has(origin)) return true;
+  return false;
 }
 
 function isTrustedApiOrigin(origin) {
-  return isTrustedUiOrigin(origin) || /^chrome-extension:\/\/[a-p]{32}$/.test(origin);
+  if (trustedExtensionOrigins.has(origin)) return true;
+  if (trustedUiOrigins.has(origin)) return true;
+  if (!origin) return true;
+  return false;
+}
+
+function readExtensionIds() {
+  const ids = String(process.env.WORKBENCH_EXTENSION_IDS || "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+  if (!ids.length || ids.some((id) => !/^[a-p]{32}$/.test(id))) {
+    throw new Error("Fatal Error: WORKBENCH_EXTENSION_IDS must contain one or more Chrome extension IDs.");
+  }
+  return [...new Set(ids)];
+}
+
+function requireWorkbenchApiToken() {
+  const token = String(process.env.WORKBENCH_API_TOKEN || "");
+  if (token.length < 32) {
+    throw new Error("Fatal Error: WORKBENCH_API_TOKEN must be at least 32 characters.");
+  }
+  return token;
+}
+
+function tokensMatch(provided, expected) {
+  if (typeof provided !== "string" || provided.length !== expected.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));
 }
 
 function validateHandoffPackage(value) {

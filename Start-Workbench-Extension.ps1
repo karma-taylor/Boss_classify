@@ -1,6 +1,9 @@
 ﻿$ErrorActionPreference = "Stop"
 
 $appDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$envLoader = Join-Path $appDir "scripts\Import-WorkbenchEnv.ps1"
+. $envLoader
+Import-WorkbenchEnvironment -AppDirectory $appDir
 $appUrl = "http://127.0.0.1:8788"
 $extensionDir = Join-Path $appDir "browser-extension"
 
@@ -30,7 +33,7 @@ if (-not (Test-Path (Join-Path $extensionDir "manifest.json"))) {
 
 $serverReady = $false
 try {
-  $version = Invoke-RestMethod "$appUrl/api/system/version" -TimeoutSec 2
+  $version = Invoke-RestMethod "$appUrl/api/system/version" -Headers @{ "X-Workbench-Token" = $env:WORKBENCH_API_TOKEN } -TimeoutSec 2
   $serverReady = [bool]$version.version
 } catch {
   $serverReady = $false
@@ -38,17 +41,11 @@ try {
 
 if (-not $serverReady) {
   Write-Host "[SERVER] Starting local workbench..." -ForegroundColor Cyan
-  Start-Process powershell -WindowStyle Minimized -ArgumentList @(
-    "-NoProfile",
-    "-ExecutionPolicy",
-    "Bypass",
-    "-Command",
-    "Set-Location '$appDir'; npm.cmd start"
-  )
+  & (Join-Path $appDir "Start-WorkbenchServer.ps1")
   $deadline = (Get-Date).AddSeconds(20)
   while ((Get-Date) -lt $deadline) {
     try {
-      $version = Invoke-RestMethod "$appUrl/api/system/version" -TimeoutSec 2
+      $version = Invoke-RestMethod "$appUrl/api/system/version" -Headers @{ "X-Workbench-Token" = $env:WORKBENCH_API_TOKEN } -TimeoutSec 2
       if ($version.version) {
         $serverReady = $true
         break

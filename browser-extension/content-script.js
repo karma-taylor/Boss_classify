@@ -20,7 +20,7 @@
       handleBossMessage(message)
         .then(sendResponse)
         .catch((error) => {
-          sendResponse({ ok: false, error: error.message || "Boss page action failed" });
+          sendResponse({ ok: false, error: normalizeContentError(error) });
         });
       return true;
     });
@@ -47,7 +47,7 @@
           postHistoryPortMessage(port, "history-collection-result", requestId, result);
         } catch (error) {
           postHistoryPortMessage(port, "history-collection-error", requestId, {
-            error: error?.message || "history_collection_failed"
+            error: normalizeContentError(error)
           });
         } finally {
           activeHistoryCollection = null;
@@ -604,7 +604,7 @@
     assertChatPage();
     const listContainer = findConversationSidebarStrict();
     if (!listContainer) {
-      throw new Error(`conversation_sidebar_missing ${JSON.stringify(diagnoseBossChatPage())}`);
+      throw new Error("DOM_NODE_NOT_FOUND");
     }
 
     const limit = Math.max(1, Math.min(Number(options.limit || MAX_HISTORY_CONVERSATIONS), MAX_HISTORY_CONVERSATIONS));
@@ -625,7 +625,7 @@
       }, onProgress);
       const visibleCards = getVisibleConversationCards();
       if (!visibleCards.length) {
-        throw new Error(`visible_conversation_cards_missing ${JSON.stringify(diagnoseBossChatPage())}`);
+        throw new Error("DOM_NODE_NOT_FOUND");
       }
 
       const freshCards = [];
@@ -731,10 +731,10 @@
       throw new Error("boss_auth_or_risk_page");
     }
     if (!isStandardChatRoute()) {
-      throw new Error(`boss_standard_chat_required url=${window.location.href}`);
+      throw new Error("AUTH_TIMEOUT");
     }
     if (window.innerWidth < 1200) {
-      throw new Error(`chat_viewport_too_narrow width=${window.innerWidth}`);
+      throw new Error("VIEWPORT_UNSUPPORTED");
     }
     const pageType = detectBossPageType();
     if (pageType !== "chat") {
@@ -1007,6 +1007,14 @@
     try {
       chrome.runtime.sendMessage({ type: "telemetryError", error_type: errorType });
     } catch {}
+  }
+
+  function normalizeContentError(error) {
+    const message = String(error?.message || "");
+    if (["DOM_NODE_NOT_FOUND", "AUTH_TIMEOUT", "VIEWPORT_UNSUPPORTED", "boss_auth_or_risk_page", "boss_chat_page_required"].includes(message)) {
+      return message;
+    }
+    return "DOM_PARSE_ERROR";
   }
 
   function isUsefulConversationMessage(text) {
@@ -1496,42 +1504,12 @@
   function diagnoseBossChatPage() {
     const sidebar = findConversationSidebarStrict();
     const pane = findConversationPane();
-    const paneMessages = collectCurrentConversationMessages(pane).slice(-12);
-    const globalCards = findGlobalConversationCardCandidates().slice(0, 8).map((card, index) => {
-      const meta = extractConversationMeta(card, index, 0);
-      return {
-        title: meta.title,
-        company: meta.company,
-        preview: meta.preview_text,
-        className: card.className || ""
-      };
-    });
-    const cards = getVisibleConversationCards().slice(0, 8).map((card, index) => {
-      const meta = extractConversationMeta(card, index, 0);
-      return {
-        title: meta.title,
-        company: meta.company,
-        preview: meta.preview_text,
-        active: isMarkedAsActiveCard(card)
-      };
-    });
-
     return {
-      url: window.location.href,
-      title: document.title,
-      viewport: { width: window.innerWidth, height: window.innerHeight },
       route_ok: isStandardChatRoute(),
       sidebar_found: Boolean(sidebar),
-      sidebar_class: sidebar?.className || "",
       pane_found: Boolean(pane),
-      pane_class: pane?.className || "",
-      pane_text_sample: cleanText(pane?.innerText || "").slice(0, 240),
-      pane_message_count: paneMessages.length,
-      pane_messages: paneMessages,
-      global_card_count: globalCards.length,
-      global_cards: globalCards,
-      card_count: cards.length,
-      cards
+      card_count: getVisibleConversationCards().length,
+      message_count: collectCurrentConversationMessages(pane).length
     };
   }
 

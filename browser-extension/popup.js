@@ -2,6 +2,7 @@ const statusEl = document.getElementById("status");
 const syncButton = document.getElementById("sync");
 const openWorkbenchButton = document.getElementById("open-workbench");
 const telemetryEnabledEl = document.getElementById("telemetry-enabled");
+const workbenchTokenEl = document.getElementById("workbench-token");
 
 const healthStatusEl = document.getElementById("health-status");
 const refreshHealthButton = document.getElementById("refresh-health");
@@ -182,12 +183,19 @@ historyRangeEl.addEventListener("change", toggleCustomRange);
 telemetryEnabledEl.addEventListener("change", async () => {
   await chrome.storage.local.set({ telemetry_enabled: telemetryEnabledEl.checked });
 });
+workbenchTokenEl.addEventListener("change", async () => {
+  await chrome.storage.local.set({ workbench_api_token: workbenchTokenEl.value.trim() });
+});
 
 void initialize();
 
 async function initialize() {
-  const { telemetry_enabled: telemetryEnabled } = await chrome.storage.local.get("telemetry_enabled");
+  const { telemetry_enabled: telemetryEnabled, workbench_api_token: workbenchToken } = await chrome.storage.local.get([
+    "telemetry_enabled",
+    "workbench_api_token"
+  ]);
   telemetryEnabledEl.checked = telemetryEnabled !== false;
+  workbenchTokenEl.value = workbenchToken || "";
   toggleCustomRange();
   setStatus(statusEl, TEXT.waitingSync, "");
   setStatus(healthStatusEl, TEXT.waitingHealth, "");

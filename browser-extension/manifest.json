@@ -3,6 +3,12 @@
   "name": "ResuMatch \u6295\u9012\u540c\u6b65",
   "version": "0.3.1",
   "description": "\u628a Boss \u5c97\u4f4d\u548c\u56de\u590d\u540c\u6b65\u5230\u672c\u5730\u5de5\u4f5c\u53f0\u3002",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
   "action": {
     "default_title": "ResuMatch \u6295\u9012\u540c\u6b65",
     "default_popup": "popup.html"
@@ -18,9 +24,11 @@
   ],
   "host_permissions": [
     "https://www.zhipin.com/*",
-    "http://127.0.0.1:8788/*",
-    "https://telemetry.example.invalid/*"
+    "http://127.0.0.1:8788/*"
   ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self';"
+  },
   "content_scripts": [
     {
       "matches": [
