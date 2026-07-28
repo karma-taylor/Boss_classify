@@ -71,7 +71,7 @@ function pickAllowedProperties(eventName, properties) {
   // data into telemetry payloads: unrecognized properties are discarded.
   if (eventName === "app_launched") {
     const extensionVersion = String(properties.extension_version || "");
-    if (!/^\d+\.\d+\.\d+$/.test(extensionVersion)) return null;
+    if (!/^\d+(\.\d+){1,3}$/.test(extensionVersion)) return null;
     return {
       $process_person_profile: false,
       extension_version: extensionVersion
