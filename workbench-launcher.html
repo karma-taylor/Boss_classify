@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ResuMatch Launcher</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f4f7fb;
+        --panel: rgba(255, 255, 255, 0.96);
+        --ink: #17202b;
+        --muted: #5b6776;
+        --line: #d7e0ea;
+        --blue: #2563eb;
+        --amber: #d97706;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: radial-gradient(circle at top, #f8fbff 0%, var(--bg) 55%, #edf2f8 100%);
+        color: var(--ink);
+        font-family: "Segoe UI", Arial, sans-serif;
+      }
+
+      .panel {
+        width: min(520px, calc(100vw - 32px));
+        padding: 28px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: var(--panel);
+        box-shadow: 0 24px 48px rgba(23, 32, 43, 0.12);
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 28px;
+        line-height: 1.15;
+      }
+
+      p {
+        margin: 12px 0 0;
+        color: var(--muted);
+        font-size: 15px;
+        line-height: 1.7;
+      }
+
+      .status {
+        margin-top: 22px;
+        padding: 14px 16px;
+        border-radius: 12px;
+        background: #f8fafc;
+        color: var(--blue);
+        font-weight: 700;
+        line-height: 1.6;
+        white-space: pre-wrap;
+      }
+
+      .status.warn {
+        color: var(--amber);
+      }
+
+      .bar {
+        height: 8px;
+        margin-top: 18px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: #e8eef6;
+      }
+
+      .bar > span {
+        display: block;
+        width: 28%;
+        height: 100%;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #1d4ed8 0%, #3b82f6 100%);
+        animation: pulse 1.2s ease-in-out infinite;
+      }
+
+      .actions {
+        display: flex;
+        gap: 12px;
+        margin-top: 18px;
+      }
+
+      button,
+      a {
+        appearance: none;
+        border-radius: 10px;
+        padding: 12px 14px;
+        font-size: 14px;
+        font-weight: 700;
+        text-decoration: none;
+      }
+
+      button {
+        border: 0;
+        background: var(--blue);
+        color: #fff;
+        cursor: pointer;
+      }
+
+      a {
+        border: 1px solid var(--line);
+        background: #fff;
+        color: var(--ink);
+      }
+
+      @keyframes pulse {
+        0% { transform: translateX(-10%); opacity: 0.7; }
+        50% { transform: translateX(220%); opacity: 1; }
+        100% { transform: translateX(360%); opacity: 0.7; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="panel">
+      <h1>ResuMatch is starting</h1>
+      <p>This local launcher waits for the workbench server first, then redirects to the app when it is truly ready.</p>
+      <div id="status" class="status">Waiting for http://127.0.0.1:8788 ...</div>
+      <div class="bar" aria-hidden="true"><span></span></div>
+      <div class="actions">
+        <button id="retry" type="button">Retry</button>
+        <a id="open" href="http://127.0.0.1:8788" target="_self">Open directly</a>
+      </div>
+    </main>
+    <script>
+      const appUrl = "http://127.0.0.1:8788";
+      const versionUrl = appUrl + "/api/system/version";
+      const statusEl = document.getElementById("status");
+      const retryButton = document.getElementById("retry");
+      const openLink = document.getElementById("open");
+
+      let attempts = 0;
+      let redirected = false;
+
+      async function checkWorkbenchReady() {
+        attempts += 1;
+        setStatus("Connecting to local workbench... attempt " + attempts);
+
+        try {
+          const response = await fetch(versionUrl, { cache: "no-store" });
+          if (!response.ok) throw new Error("HTTP " + response.status);
+          const payload = await response.json();
+          if (!payload || !payload.version) throw new Error("missing version");
+          if (redirected) return;
+          redirected = true;
+          setStatus("Workbench is ready. Opening now...");
+          window.location.replace(appUrl);
+          return;
+        } catch (_error) {
+          if (attempts >= 20) {
+            setStatus(
+              "The local server is still warming up.\nPlease wait a few seconds, then click Retry or Open directly.",
+              true
+            );
+            return;
+          }
+        }
+
+        window.setTimeout(checkWorkbenchReady, 700);
+      }
+
+      function setStatus(text, warn) {
+        statusEl.textContent = text;
+        statusEl.classList.toggle("warn", Boolean(warn));
+      }
+
+      retryButton.addEventListener("click", () => {
+        attempts = 0;
+        redirected = false;
+        checkWorkbenchReady();
+      });
+
+      openLink.href = appUrl;
+      checkWorkbenchReady();
+    </script>
+  </body>
+</html>

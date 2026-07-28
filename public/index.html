@@ -1,0 +1,1117 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ResuMatch 投递控制台</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <style>
+      :root {
+        --ink: #18212f;
+        --line: #d8dee7;
+        --paper: #f7f8fa;
+      }
+      body {
+        background:
+          linear-gradient(90deg, rgba(24, 33, 47, 0.04) 1px, transparent 1px),
+          linear-gradient(180deg, rgba(24, 33, 47, 0.04) 1px, transparent 1px),
+          var(--paper);
+        background-size: 28px 28px;
+        color: var(--ink);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      .panel {
+        background: rgba(255, 255, 255, 0.96);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        box-shadow: 0 12px 28px rgba(24, 33, 47, 0.07);
+      }
+      .focus-ring:focus-visible {
+        outline: 3px solid rgba(37, 99, 235, 0.28);
+        outline-offset: 2px;
+      }
+      .rail-label {
+        writing-mode: vertical-rl;
+        text-orientation: mixed;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app" class="mx-auto min-h-screen max-w-[1480px] px-4 py-4 md:px-6">
+      <header class="mb-4 grid gap-4 lg:grid-cols-[1fr_420px]">
+        <section class="panel overflow-hidden">
+          <div class="flex">
+            <div class="hidden w-12 items-center justify-center border-r border-slate-200 bg-slate-950 text-[11px] font-semibold uppercase text-white md:flex">
+              <span class="rail-label">control tower</span>
+            </div>
+            <div class="flex-1 p-5">
+              <div class="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+                <div>
+                  <p class="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">ResuMatch local</p>
+                  <h1 class="mt-2 text-3xl font-black tracking-tight md:text-4xl">投递控制台</h1>
+                  <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+                    现在就盯三件事:按关键词找岗、把合适岗位放进候选队列、同步 HR 回复做复盘。
+                  </p>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                  <button class="focus-ring rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white disabled:opacity-50" :disabled="busy" @click="refreshAll">刷新</button>
+                  <button class="focus-ring rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50" :disabled="busy" @click="buildPlan">生成明日清单</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel p-4">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">session</p>
+              <p class="mt-2 text-xl font-black text-blue-700">扩展找岗模式</p>
+            </div>
+            <span class="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">无需 9222</span>
+          </div>
+          <div class="mt-4 grid grid-cols-5 gap-2 text-center">
+            <div class="rounded-md bg-slate-100 p-3">
+              <p class="text-[11px] font-bold text-slate-500">今日已投</p>
+              <p class="mt-1 text-2xl font-black">{{ todayMetric.applied_count }}</p>
+            </div>
+            <div class="rounded-md bg-slate-100 p-3">
+              <p class="text-[11px] font-bold text-slate-500">今日归因回复</p>
+              <p class="mt-1 text-2xl font-black">{{ todayMetric.reply_count }}</p>
+            </div>
+            <div class="rounded-md bg-slate-100 p-3">
+              <p class="text-[11px] font-bold text-slate-500">今日归因索简历</p>
+              <p class="mt-1 text-2xl font-black">{{ todayMetric.resume_request_count }}</p>
+            </div>
+            <div class="rounded-md bg-slate-100 p-3">
+              <p class="text-[11px] font-bold text-slate-500">今日归因邀面</p>
+              <p class="mt-1 text-2xl font-black">{{ todayMetric.interview_count }}</p>
+            </div>
+            <div class="rounded-md bg-slate-100 p-3">
+              <p class="text-[11px] font-bold text-slate-500">30 天邀面率</p>
+              <p class="mt-1 text-2xl font-black">{{ formatRate(latestMetric?.interview_rate) }}</p>
+            </div>
+          </div>
+        </section>
+      </header>
+
+      <main class="grid gap-4 xl:grid-cols-[360px_1fr]">
+        <aside class="space-y-4">
+          <section class="panel p-4">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Boss scout</p>
+                <h2 class="mt-1 text-lg font-black">关键词直搜</h2>
+              </div>
+              <span class="rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-700">3-10 页</span>
+            </div>
+
+            <label class="mt-4 block text-xs font-bold text-slate-600">岗位名称</label>
+            <textarea v-model="search.job_titles_text" class="focus-ring mt-1 h-20 w-full resize-none rounded-md border border-slate-300 px-3 py-2 text-sm"></textarea>
+            <p class="mt-1 text-xs leading-5 text-slate-500">标题不完全一致也会保留,只要 JD 里仍然命中相关方向。</p>
+
+            <label class="mt-3 block text-xs font-bold text-slate-600">地点偏好</label>
+            <input v-model="search.locations_text" class="focus-ring mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+
+            <label class="mt-3 block text-xs font-bold text-slate-600">岗位关键词</label>
+            <textarea v-model="search.jd_keywords_text" class="focus-ring mt-1 h-20 w-full resize-none rounded-md border border-slate-300 px-3 py-2 text-sm"></textarea>
+
+            <div class="mt-3 grid grid-cols-2 gap-2">
+              <label class="block text-xs font-bold text-slate-600">
+                最低薪资 K
+                <input v-model="search.salary_min" inputmode="numeric" class="focus-ring mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+              </label>
+              <label class="block text-xs font-bold text-slate-600">
+                最高薪资 K
+                <input v-model="search.salary_max" inputmode="numeric" class="focus-ring mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+              </label>
+              <label class="block text-xs font-bold text-slate-600">
+                公司规模最小
+                <input v-model="search.company_size_min" inputmode="numeric" class="focus-ring mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+              </label>
+              <label class="block text-xs font-bold text-slate-600">
+                公司规模最大
+                <input v-model="search.company_size_max" inputmode="numeric" class="focus-ring mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+              </label>
+              <label class="block text-xs font-bold text-slate-600">
+                今日推荐上限
+                <input v-model="search.daily_recommendation_limit" inputmode="numeric" class="focus-ring mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+              </label>
+            </div>
+
+            <div class="mt-3 grid grid-cols-[88px_1fr] gap-2">
+              <div>
+                <label class="block text-xs font-bold text-slate-600">页数</label>
+                <input v-model.number="search.pages" type="number" min="1" max="10" class="focus-ring mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+              </div>
+              <div class="grid grid-cols-2 items-end gap-2">
+                <button class="focus-ring rounded-md bg-slate-950 px-3 py-2 text-sm font-bold text-white disabled:opacity-50" :disabled="busy" @click="runSearch">搜索</button>
+                <button class="focus-ring rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:opacity-50" :disabled="busy" @click="copyCollectorScript">复制采集脚本</button>
+              </div>
+            </div>
+
+            <div v-if="searchSummary" class="mt-4 rounded-md border border-blue-100 bg-blue-50 p-3 text-xs leading-5 text-blue-900">
+              <div class="font-bold">本次自动抓取摘要</div>
+              <div class="mt-1">已保存 {{ searchSummary.saved || 0 }} 个岗位,已存在 {{ searchSummary.existing_count || 0 }} 个,过滤 {{ searchSummary.filtered_out || 0 }} 个,去重 {{ searchSummary.deduped || 0 }} 个,已扫描 {{ searchSummary.pages_scanned || 0 }} 页。</div>
+              <div class="mt-1">已评估 {{ searchSummary.queued_for_evaluation || 0 }} 个,进入候选队列 {{ searchSummary.queued_candidates || 0 }} 个,不建议投 {{ searchSummary.not_recommended_count || 0 }} 个。</div>
+              <div v-if="filterReasonText(searchSummary).length" class="mt-2 border-t border-blue-100 pt-2">
+                <div class="font-bold">过滤原因</div>
+                <div class="mt-1">{{ filterReasonText(searchSummary).join("；") }}</div>
+              </div>
+              <div v-if="softFlagText(searchSummary).length" class="mt-2 border-t border-blue-100 pt-2">
+                <div class="font-bold">软提示</div>
+                <div class="mt-1">{{ softFlagText(searchSummary).join("；") }}</div>
+              </div>
+              <div v-if="citySummaryText(searchSummary).length" class="mt-2 border-t border-blue-100 pt-2">
+                <div class="font-bold">按搜索城市返回</div>
+                <div class="mt-1">{{ citySummaryText(searchSummary).join("；") }}</div>
+                <div v-if="cityMismatchCount(searchSummary)" class="mt-1">其中 {{ cityMismatchCount(searchSummary) }} 个岗位的实际地点与发起搜索城市不一致，已保留为地点软提示。</div>
+              </div>
+            </div>
+
+            <p v-if="notice" class="mt-4 rounded-md bg-slate-100 px-3 py-2 text-xs leading-5 text-slate-700">{{ notice }}</p>
+          </section>
+
+          <section class="panel p-4">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">history crawl</p>
+                <h2 class="mt-1 text-lg font-black">历史回复统计</h2>
+              </div>
+              <button class="focus-ring rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800" @click="refreshHistoryPanels">刷新</button>
+            </div>
+
+            <div class="mt-3 grid grid-cols-2 gap-2">
+              <label class="block text-xs font-bold text-slate-600">
+                时间范围
+                <select v-model="history.range" @change="handleHistoryFilterChange" class="focus-ring mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+                  <option value="7">近 7 天</option>
+                  <option value="30">近 30 天</option>
+                  <option value="90">近 90 天</option>
+                  <option value="custom">自定义</option>
+                </select>
+              </label>
+              <label class="block text-xs font-bold text-slate-600">
+                会话上限
+                <input v-model.number="history.limit" @change="handleHistoryFilterChange" type="number" min="1" max="200" class="focus-ring mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+              </label>
+              <label class="block text-xs font-bold text-slate-600">
+                开始时间
+                <input v-model="history.start" @change="handleHistoryFilterChange" :disabled="history.range !== 'custom'" type="datetime-local" class="focus-ring mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+              </label>
+              <label class="block text-xs font-bold text-slate-600">
+                结束时间
+                <input v-model="history.end" @change="handleHistoryFilterChange" :disabled="history.range !== 'custom'" type="datetime-local" class="focus-ring mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+              </label>
+            </div>
+
+            <label class="mt-3 flex items-center gap-2 text-xs font-bold text-slate-600">
+              <input v-model="history.includeSupplement" @change="handleHistoryFilterChange" type="checkbox" />
+              统计里包含补录会话
+            </label>
+
+            <div class="mt-3 grid grid-cols-2 gap-2">
+              <button class="focus-ring rounded-md bg-blue-600 px-3 py-2 text-sm font-bold text-white disabled:opacity-50" :disabled="busy" @click="runHistorySync">历史检索</button>
+              <button class="focus-ring rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:opacity-50" :disabled="busy" @click="refreshHistoryPanels">刷新统计</button>
+            </div>
+
+            <div class="mt-4 grid grid-cols-2 gap-2 text-center">
+              <div class="rounded-md bg-slate-100 p-3">
+                <p class="text-[11px] font-bold text-slate-500">投递数</p>
+                <p class="mt-1 text-2xl font-black">{{ historySummary.applied_count || 0 }}</p>
+              </div>
+              <div class="rounded-md bg-slate-100 p-3">
+                <p class="text-[11px] font-bold text-slate-500">有回复</p>
+                <p class="mt-1 text-2xl font-black">{{ historySummary.reply_count || 0 }}</p>
+              </div>
+              <div class="rounded-md bg-slate-100 p-3">
+                <p class="text-[11px] font-bold text-slate-500">索简历</p>
+                <p class="mt-1 text-2xl font-black">{{ historySummary.resume_request_count || 0 }}</p>
+              </div>
+              <div class="rounded-md bg-slate-100 p-3">
+                <p class="text-[11px] font-bold text-slate-500">邀面</p>
+                <p class="mt-1 text-2xl font-black">{{ historySummary.interview_count || 0 }}</p>
+              </div>
+            </div>
+
+            <div v-if="historyCoverage.status === 'complete'" class="mt-3 rounded-md bg-slate-100 p-3 text-xs leading-5 text-slate-700">
+              回复率 {{ formatRate(historySummary.reply_rate) }},索简历率 {{ formatRate(historySummary.resume_request_rate) }},邀面率 {{ formatRate(historySummary.interview_rate) }}。
+              <div class="mt-1">补录会话 {{ historySummary.supplement_count || 0 }} 个,其中有效回复 {{ historySummary.supplement_reply_count || 0 }} 个。</div>
+            </div>
+
+            <div class="mt-3 rounded-md border p-3 text-xs leading-5" :class="historyCoverage.status === 'complete' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-amber-200 bg-amber-50 text-amber-800'">
+              <strong>{{ historyCoverage.status === 'complete' ? '\u5df2\u5b8c\u6574\u8986\u76d6' : '\u90e8\u5206\u8986\u76d6' }}</strong>
+              <span v-if="historyCoverage.earliest_covered_at">: {{ formatDateTime(historyCoverage.earliest_covered_at) }}</span>
+              <span v-else>: \u5c1a\u672a\u5efa\u7acb\u53ef\u7528\u7684\u5386\u53f2\u8986\u76d6\u8303\u56f4</span>
+              <p v-if="historyCoverage.status !== 'complete'" class="mt-1">\u5f53\u524d\u6c47\u603b\u4e0d\u5b9c\u89c6\u4e3a\u5b8c\u6574\u8f6c\u5316\u7387\uff0c\u8bf7\u7ee7\u7eed\u5386\u53f2\u68c0\u7d22\u3002</p>
+            </div>
+
+            <div class="mt-3 overflow-hidden rounded-md border border-slate-200 bg-white">
+              <div class="border-b border-slate-200 px-3 py-2 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">按天变化(按首次联系归因)</div>
+              <div class="overflow-x-auto">
+                <table class="min-w-full text-left text-xs text-slate-700">
+                  <thead class="bg-slate-50 text-[11px] font-bold text-slate-500">
+                    <tr>
+                      <th class="px-3 py-2">日期</th>
+                      <th class="px-3 py-2">投递数</th>
+                      <th class="px-3 py-2">新回复</th>
+                      <th class="px-3 py-2">索简历</th>
+                      <th class="px-3 py-2">邀面</th>
+                      <th class="px-3 py-2">补录会话数</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="row in historyDaily" :key="row.metric_date" class="border-t border-slate-100">
+                      <td class="px-3 py-2 font-semibold">{{ row.metric_date }}</td>
+                      <td class="px-3 py-2">{{ row.applied_count || 0 }}</td>
+                      <td class="px-3 py-2">{{ row.reply_count || 0 }}</td>
+                      <td class="px-3 py-2">{{ row.resume_request_count || 0 }}</td>
+                      <td class="px-3 py-2">{{ row.interview_count || 0 }}</td>
+                      <td class="px-3 py-2">{{ row.supplement_count || 0 }}</td>
+                    </tr>
+                    <tr v-if="!historyDaily.length">
+                      <td colspan="6" class="px-3 py-6 text-center text-slate-400">当前时间范围内还没有历史事件。</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <p v-if="historyNotice" class="mt-3 rounded-md bg-slate-100 px-3 py-2 text-xs leading-5 text-slate-700">{{ historyNotice }}</p>
+          </section>
+        </aside>
+
+        <section class="space-y-4">
+          <section class="panel p-4">
+            <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">candidate queue</p>
+                <h2 class="mt-1 text-2xl font-black">今日投递候选队列</h2>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <button class="focus-ring rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700" @click="downloadArchive">导出数据</button>
+                <button class="focus-ring rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50" :disabled="busy" @click="evaluateBatch">批量评估</button>
+              </div>
+            </div>
+
+            <div class="mt-4 grid gap-3">
+              <article v-for="item in candidates" :key="item.application_id || item.id" class="rounded-md border border-slate-200 bg-white p-4">
+                <div class="grid gap-4 lg:grid-cols-[1fr_220px]">
+                  <div class="min-w-0">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <a class="text-lg font-black text-blue-700" :href="item.source_url" target="_blank">{{ item.title || "未命名岗位" }}</a>
+                      <span class="rounded-full px-2 py-1 text-[11px] font-bold" :class="queueClass(item.queue_status)">{{ queueLabel(item.queue_status) }}</span>
+                    </div>
+                    <p class="mt-1 text-sm text-slate-500">{{ formatMetaLine(item) }}</p>
+                    <p v-if="item.tier_reason" class="mt-3 text-sm leading-6 text-slate-700">{{ item.tier_reason }}</p>
+                    <p v-if="visibleRejectReasons(item).length" class="mt-2 text-xs leading-5 text-rose-700">不建议点:{{ visibleRejectReasons(item).join(";") }}</p>
+                    <p v-if="visibleRiskFlags(item).length" class="mt-1 text-xs leading-5 text-amber-700">风险标签:{{ visibleRiskFlags(item).join("、") }}</p>
+                    <div v-if="item.greeting_draft" class="mt-3 rounded-md bg-slate-50 p-3 text-sm leading-6 text-slate-700">{{ item.greeting_draft }}</div>
+                  </div>
+                  <div>
+                    <div class="mb-3 flex items-end justify-between">
+                      <span class="text-xs font-bold text-slate-500">匹配分</span>
+                      <span class="text-3xl font-black">{{ Math.round(item.match_score || 0) }}</span>
+                    </div>
+                    <div class="h-2 overflow-hidden rounded-full bg-slate-100">
+                      <div class="h-full rounded-full bg-emerald-600" :style="{ width: `${Math.max(4, Math.min(100, item.match_score || 0))}%` }"></div>
+                    </div>
+                    <div class="mt-3 grid grid-cols-2 gap-2">
+                      <a class="focus-ring rounded bg-blue-600 px-2 py-2 text-center text-xs font-bold text-white" :href="item.source_url" target="_blank">打开 Boss</a>
+                      <button class="focus-ring rounded bg-slate-100 px-2 py-2 text-xs font-bold text-slate-700" @click="copyGreeting(item)">复制招呼语</button>
+                      <button class="focus-ring rounded bg-emerald-600 px-2 py-2 text-xs font-bold text-white" @click="markApplied(item)">已投</button>
+                      <button class="focus-ring rounded bg-rose-50 px-2 py-2 text-xs font-bold text-rose-700" @click="ignore(item)">忽略</button>
+                      <label class="focus-ring cursor-pointer rounded bg-slate-100 px-2 py-2 text-center text-xs font-bold text-slate-700">导入评估<input class="hidden" type="file" accept="application/json,.json" @change="importHandoff($event, item)" /></label>
+                      <label class="focus-ring cursor-pointer rounded bg-slate-100 px-2 py-2 text-center text-xs font-bold text-slate-700">绑定简历<input class="hidden" type="file" accept="application/json,.json" @change="importArtifacts($event, item)" /></label>
+                      <button class="focus-ring col-span-2 rounded bg-slate-800 px-2 py-2 text-xs font-bold text-white" @click="openDossier(item)">查看投递档案</button>
+                    </div>
+                  </div>
+                </div>
+              </article>
+
+              <div v-if="!candidates.length" class="rounded-md border border-dashed border-slate-300 bg-slate-50 p-10 text-center">
+                <p class="text-lg font-black text-slate-500">还没有候选岗位</p>
+                <p class="mt-2 text-sm text-slate-500">{{ currentSearchBatchId ? "本次搜索没有留下可处理候选。" : "请先完成一次关键词搜索，系统会只展示该次搜索进入候选的岗位。" }}</p>
+              </div>
+            </div>
+          </section>
+
+          <section v-if="dossier" class="panel p-4">
+            <div class="flex items-start justify-between gap-4">
+              <div>
+                <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">application dossier</p>
+                <h2 class="mt-1 text-xl font-black">{{ dossier.job.title }} · {{ dossier.job.company || "公司待补充" }}</h2>
+                <p class="mt-2 text-sm text-slate-600">状态：{{ dossier.application.status }}；已绑定 {{ dossier.handoffs.length }} 份评估、{{ dossier.artifacts.length }} 个简历产物。</p>
+              </div>
+              <button class="focus-ring rounded bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700" @click="dossier = null">关闭</button>
+            </div>
+            <div class="mt-4 grid gap-3 lg:grid-cols-2">
+              <div class="rounded-md bg-slate-50 p-3">
+                <p class="text-xs font-bold text-slate-500">最近评估</p>
+                <template v-if="dossier.handoffs.length">
+                  <p class="mt-2 text-sm font-bold text-slate-800">{{ dossier.handoffs[0].assessment.job_tier || "未分档" }} 类 · {{ dossier.handoffs[0].assessment.match_score ?? "未评分" }} 分</p>
+                  <p class="mt-2 text-sm leading-6 text-slate-700">{{ dossier.handoffs[0].assessment.summary || "暂无总结" }}</p>
+                </template>
+                <p v-else class="mt-2 text-sm text-slate-500">尚未绑定 ResuMatch 评估包。</p>
+              </div>
+              <div class="rounded-md bg-slate-50 p-3">
+                <p class="text-xs font-bold text-slate-500">简历产物</p>
+                <p v-for="artifact in dossier.artifacts" :key="artifact.id" class="mt-2 break-all text-sm text-slate-700">{{ artifact.label }}：{{ artifact.local_path }}</p>
+                <p v-if="!dossier.artifacts.length" class="mt-2 text-sm text-slate-500">尚未绑定 Resume Tailor 生成结果。</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel p-4">
+            <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">reply board</p>
+                <h2 class="mt-1 text-2xl font-black">HR 回复看板</h2>
+              </div>
+              <button class="focus-ring rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800" @click="refreshReplies">刷新回复</button>
+            </div>
+
+            <div v-for="group in replyGroups" :key="group.key" class="mt-4">
+              <div class="mb-2 flex items-center justify-between">
+                <h3 class="text-sm font-black text-slate-700">{{ group.label }}</h3>
+                <span class="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-500">{{ group.items.length }}</span>
+              </div>
+              <div class="grid gap-3">
+                <article v-for="item in group.items" :key="`${group.key}-${item.event_id || item.application_id}`" class="rounded-md border border-slate-200 bg-white p-4">
+                  <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div class="min-w-0 flex-1">
+                      <div class="flex flex-wrap items-center gap-2">
+                        <a class="text-lg font-black text-blue-700" :href="item.source_url" target="_blank">{{ item.title || "未命名岗位" }}</a>
+                        <span class="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-600">{{ item.feedback_intent || "待人工判断" }}</span>
+                        <span v-if="item.source_kind === 'auto_supplement'" class="rounded-full bg-amber-50 px-2 py-1 text-[11px] font-bold text-amber-700">补录</span>
+                      </div>
+                      <p class="mt-1 text-sm text-slate-500">{{ formatMetaLine(item) }}</p>
+                      <p class="mt-2 text-xs leading-5 text-slate-500">最近回复:{{ formatDateTime(item.last_replied_at) }}</p>
+                      <p v-if="item.feedback_reason" class="mt-2 text-sm leading-6 text-slate-700">{{ item.feedback_reason }}</p>
+                      <div v-if="item.last_message_text" class="mt-3 rounded-md bg-slate-50 p-3 text-sm leading-6 text-slate-700">{{ item.last_message_text }}</div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 lg:w-[220px]">
+                      <a class="focus-ring rounded bg-blue-600 px-2 py-2 text-center text-xs font-bold text-white" :href="item.source_url" target="_blank">打开 Boss</a>
+                      <button class="focus-ring rounded bg-slate-100 px-2 py-2 text-xs font-bold text-slate-700" @click="openAnalyze(item)">分析对话</button>
+                      <button class="focus-ring rounded bg-emerald-600 px-2 py-2 text-xs font-bold text-white" @click="markReplyHandled(item)">标记已处理</button>
+                      <button class="focus-ring rounded bg-rose-50 px-2 py-2 text-xs font-bold text-rose-700" @click="ignoreReply(item)">忽略</button>
+                      <button class="focus-ring rounded bg-slate-100 px-2 py-2 text-xs font-bold text-slate-700" @click="reclassifyReply(item, '明确邀面')">改判邀面</button>
+                      <button class="focus-ring rounded bg-slate-100 px-2 py-2 text-xs font-bold text-slate-700" @click="reclassifyReply(item, '索要简历')">改判索简历</button>
+                    </div>
+                  </div>
+                </article>
+              </div>
+            </div>
+
+            <div v-if="!replies.length" class="mt-4 rounded-md border border-dashed border-slate-300 bg-slate-50 p-10 text-center">
+              <p class="text-lg font-black text-slate-500">还没有待处理回复</p>
+              <p class="mt-2 text-sm text-slate-500">去 Boss 聊天页点扩展里的"同步当前可见会话"或"历史检索"。</p>
+            </div>
+          </section>
+
+          <section class="panel p-4">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">history runs</p>
+                <h2 class="mt-1 text-2xl font-black">历史检索记录</h2>
+              </div>
+            </div>
+            <div class="mt-4 grid gap-3">
+              <article v-for="run in historyRuns" :key="run.id" class="rounded-md border border-slate-200 bg-white p-4">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="rounded-full px-2 py-1 text-[11px] font-bold" :class="run.status === 'completed' ? 'bg-emerald-50 text-emerald-700' : run.status === 'failed' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700'">{{ run.status }}</span>
+                  <span class="text-sm font-semibold text-slate-700">开始于 {{ formatDateTime(run.started_at) }}</span>
+                </div>
+                <p class="mt-2 text-sm text-slate-600">扫描会话 {{ run.scanned_conversations || 0 }},新增消息 {{ run.new_messages || 0 }},补录 {{ run.supplemented_count || 0 }},分类 {{ run.classified_count || 0 }}</p>
+                <p v-if="run.stopped_reason" class="mt-1 text-xs text-slate-500">停止原因:{{ run.stopped_reason }}</p>
+              </article>
+            </div>
+          </section>
+
+          <section class="panel p-4">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">tomorrow plan</p>
+                <h2 class="mt-1 text-2xl font-black">明日清单</h2>
+              </div>
+            </div>
+            <div class="mt-4 grid gap-3">
+              <article v-for="item in plan" :key="item.job_id" class="rounded-md border border-slate-200 bg-white p-4">
+                <div class="flex items-center justify-between gap-3">
+                  <div class="min-w-0">
+                    <a class="text-lg font-black text-blue-700" :href="item.source_url" target="_blank">{{ item.title || "未命名岗位" }}</a>
+                    <p class="mt-1 text-sm text-slate-500">{{ item.company || "未知公司" }} · {{ item.location || "地点未标注" }}</p>
+                    <p class="mt-2 text-sm text-slate-700">{{ item.reason }}</p>
+                  </div>
+                  <div class="text-right">
+                    <p class="text-xs font-bold text-slate-500">{{ item.plan_type === 'exploration' ? '探索' : '利用' }}</p>
+                    <p class="mt-1 text-3xl font-black">{{ Math.round(item.final_score || 0) }}</p>
+                  </div>
+                </div>
+              </article>
+            </div>
+          </section>
+        </section>
+      </main>
+
+      <div v-if="messageJob" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
+        <div class="panel w-full max-w-2xl p-4">
+          <div class="flex items-center justify-between gap-3">
+            <div>
+              <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">message intent</p>
+              <h3 class="mt-1 text-xl font-black">{{ messageJob.title }}</h3>
+            </div>
+            <button class="focus-ring rounded-md bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700" @click="closeAnalyze">关闭</button>
+          </div>
+          <textarea
+            v-model="conversationText"
+            class="focus-ring mt-4 h-48 w-full resize-none rounded-md border border-slate-300 p-3 text-sm leading-6"
+            placeholder="hr: 您好,对我们岗位感兴趣吗&#10;me: 感兴趣,我做过 AI 产品规划和项目推进&#10;hr: 可以发一份最新简历吗"
+          ></textarea>
+          <div class="mt-3 flex items-center justify-between gap-3">
+            <button class="focus-ring rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white" @click="analyzeConversation">分析对话</button>
+            <p class="text-xs text-slate-500">最近 2-3 个回合就够用</p>
+          </div>
+          <pre v-if="analysis" class="mt-4 max-h-48 overflow-auto rounded-md bg-slate-950 p-3 text-xs leading-5 text-white">{{ analysis }}</pre>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const { createApp } = Vue;
+
+      createApp({
+        data() {
+          return {
+            refreshTimer: null,
+            metrics: [],
+            jobs: [],
+            plan: [],
+            candidates: [],
+            replies: [],
+            replySummary: {},
+            historySummary: {},
+            historyDaily: [],
+            historyRuns: [],
+            historyCoverage: {},
+            currentSearchBatchId: "",
+            notice: "",
+            historyNotice: "",
+            searchSummary: null,
+            busy: false,
+            extensionReady: false,
+            search: {
+              job_titles_text: "AI 产品经理",
+              locations_text: "上海",
+              jd_keywords_text: "AI, 智能体, 企业效率",
+              salary_min: "",
+              salary_max: "",
+              company_size_min: "",
+              company_size_max: "",
+              daily_recommendation_limit: "20",
+              pages: 3
+            },
+            history: {
+              range: "30",
+              start: "",
+              end: "",
+              limit: 200,
+              includeSupplement: false
+            },
+            messageJob: null,
+            conversationText: "",
+            analysis: "",
+            dossier: null
+          };
+        },
+        computed: {
+          latestMetric() {
+            return this.metrics[this.metrics.length - 1] || null;
+          },
+          todayMetric() {
+            const today = new Date().toISOString().slice(0, 10);
+            return this.metrics.find((item) => item.metric_date === today) || {
+              applied_count: 0,
+              reply_count: 0,
+              resume_request_count: 0,
+              interview_count: 0
+            };
+          },
+          replyGroups() {
+            const groups = [
+              { key: "interview", label: "明确邀面", items: [] },
+              { key: "resume_request", label: "索要简历", items: [] },
+              { key: "wechat", label: "加微信 / 约沟通", items: [] },
+              { key: "needs_review", label: "待人工判断", items: [] },
+              { key: "rejected", label: "婉拒 / 不匹配", items: [] }
+            ];
+            groups.splice(2, 0, { key: "process_progress", label: "\u6d41\u7a0b\u63a8\u8fdb", items: [] });
+            for (const item of this.replies) {
+              const target = groups.find((group) => group.key === item.reply_bucket) || groups[3];
+              target.items.push(item);
+            }
+            return groups.filter((group) => group.items.length);
+          }
+        },
+        async mounted() {
+          this.loadPreferences();
+          this.loadCurrentSearchBatch();
+          window.addEventListener("message", this.handleExtensionEvent);
+          await this.refreshAll();
+          this.refreshTimer = window.setInterval(() => {
+            this.refreshAll().catch(() => {});
+          }, 10000);
+        },
+        beforeUnmount() {
+          window.removeEventListener("message", this.handleExtensionEvent);
+          if (this.refreshTimer) {
+            window.clearInterval(this.refreshTimer);
+          }
+        },
+        methods: {
+          async api(path, options) {
+            const response = await fetch(path, {
+              headers: { "Content-Type": "application/json" },
+              ...options
+            });
+            const contentType = response.headers.get("content-type") || "";
+            const text = await response.text();
+            if (!contentType.includes("application/json")) {
+              throw new Error(text.slice(0, 160) || "接口没有返回 JSON。");
+            }
+            const data = JSON.parse(text);
+            if (!response.ok) {
+              throw new Error(data.error || "请求失败");
+            }
+            return Array.isArray(data.value) ? data.value : data;
+          },
+          async refreshAll() {
+            const [metrics, jobs, plan, candidates, replies, replySummary] = await Promise.all([
+              this.api("/api/metrics/daily"),
+              this.api("/api/jobs"),
+              this.api("/api/plans/tomorrow"),
+              this.api(this.candidateEndpoint()),
+              this.api("/api/replies"),
+              this.api("/api/replies/summary")
+            ]);
+            this.metrics = metrics;
+            this.jobs = jobs;
+            this.plan = plan;
+            this.candidates = this.filterVisibleCandidates(candidates);
+            this.replies = replies.filter((item) => !item.is_reply_handled);
+            this.replySummary = replySummary;
+            await this.refreshHistoryPanels();
+          },
+          async refreshReplies() {
+            const [replies, replySummary, metrics] = await Promise.all([
+              this.api("/api/replies"),
+              this.api("/api/replies/summary"),
+              this.api("/api/metrics/daily")
+            ]);
+            this.replies = replies.filter((item) => !item.is_reply_handled);
+            this.replySummary = replySummary;
+            this.metrics = metrics;
+          },
+          async refreshHistoryPanels() {
+            const [historySummary, historyDaily, historyRuns, historyCoverage] = await Promise.all([
+              this.api(`/api/replies/history-summary?${new URLSearchParams(this.historyQuery()).toString()}`),
+              this.api(`/api/replies/history-daily?${new URLSearchParams(this.historyQuery()).toString()}`),
+              this.api("/api/replies/history-runs"),
+              this.api(`/api/replies/history-coverage?${new URLSearchParams(this.historyQuery()).toString()}`)
+            ]);
+            this.historySummary = historySummary;
+            this.historyDaily = historyDaily;
+            this.historyRuns = historyRuns;
+            this.historyCoverage = historyCoverage;
+          },
+          async handleHistoryFilterChange() {
+            this.savePreferences();
+            if (this.busy) {
+              return;
+            }
+            try {
+              await this.refreshHistoryPanels();
+            } catch (error) {
+              this.historyNotice = error.message;
+            }
+          },
+          async runSearch() {
+            this.busy = true;
+            this.notice = "正在生成 Boss 搜索任务...";
+            this.searchSummary = null;
+            try {
+              this.savePreferences();
+              const tasks = await this.api("/api/boss/search-tasks", {
+                method: "POST",
+                body: JSON.stringify(this.searchPayload())
+              });
+              const result = await this.runExtensionBridge("runBossSearch", tasks, "boss-search");
+              this.searchSummary = result;
+              this.rememberCurrentSearchBatch(result.search_batch_id);
+              this.notice = `自动抓取完成:新保存 ${result.saved || 0} 个,已评估 ${result.queued_for_evaluation || 0} 个,进入候选 ${result.queued_candidates || 0} 个。`;
+              await this.refreshAll();
+            } catch (error) {
+              this.notice = error.message;
+            } finally {
+              this.busy = false;
+            }
+          },
+          async runHistorySync() {
+            this.busy = true;
+            this.historyNotice = "准备开始历史检索,会低频切换会话并做去重检查...";
+            try {
+              const result = await this.runExtensionBridge("runReplyHistorySync", this.historyPayload(), "reply-history");
+              this.historyNotice = `历史检索完成:扫描 ${result.synced_conversations || 0} 个会话,新增消息 ${result.new_message_count || 0} 条,补录 ${result.supplemented_count || 0} 个。`;
+              await this.refreshAll();
+            } catch (error) {
+              this.historyNotice = error.message;
+            } finally {
+              this.busy = false;
+            }
+          },
+          runExtensionBridge(type, payload, prefix) {
+            return new Promise((resolve, reject) => {
+              const requestId = `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+              let settled = false;
+              let timeout = null;
+
+              const resetTimer = (message, duration = 60000) => {
+                window.clearTimeout(timeout);
+                timeout = window.setTimeout(() => {
+                  cleanup();
+                  reject(new Error(message));
+                }, duration);
+              };
+
+              resetTimer("没有收到扩展响应。请到 chrome://extensions 刷新 ResuMatch 扩展后重试。", 6000);
+
+              const handler = (event) => {
+                if (event.source !== window) {
+                  return;
+                }
+                const data = event.data || {};
+                if (data.source !== "resumatch-extension" || data.requestId !== requestId) {
+                  return;
+                }
+
+                if (data.type === `${prefix}-accepted`) {
+                  this.updateBridgeNotice(prefix, "扩展已接管任务,正在处理...");
+                  resetTimer("扩展已接单,但后续处理超时了。请重试一次。", 90000);
+                  return;
+                }
+
+                if (data.type === `${prefix}-progress`) {
+                  this.updateBridgeNotice(prefix, data.payload?.message || "扩展正在处理...");
+                  resetTimer("扩展任务超时了。请检查 Boss 页面是否弹出登录、验证码或风控提示。", 90000);
+                  return;
+                }
+
+                if (data.type === `${prefix}-result`) {
+                  settled = true;
+                  cleanup();
+                  resolve(data.payload || {});
+                  return;
+                }
+
+                if (data.type === `${prefix}-error`) {
+                  settled = true;
+                  cleanup();
+                  reject(new Error(data.payload?.error || "扩展执行失败"));
+                }
+              };
+
+              const cleanup = () => {
+                window.removeEventListener("message", handler);
+                window.clearTimeout(timeout);
+              };
+
+              window.addEventListener("message", handler);
+              window.postMessage({ source: "resumatch-workbench", type, requestId, payload }, "*");
+
+              window.setTimeout(() => {
+                if (!settled && !this.extensionReady) {
+                  this.updateBridgeNotice(prefix, "如果一直没反应,请先刷新浏览器扩展,再点一次。");
+                }
+              }, 1800);
+            });
+          },
+          updateBridgeNotice(prefix, message) {
+            if (prefix === "boss-search") {
+              this.notice = message;
+            }
+            if (prefix === "reply-history") {
+              this.historyNotice = message;
+            }
+          },
+          handleExtensionEvent(event) {
+            if (event.source !== window) {
+              return;
+            }
+            const data = event.data || {};
+            if (data.source !== "resumatch-extension") {
+              return;
+            }
+            if (data.type === "extension-ready") {
+              this.extensionReady = true;
+            }
+          },
+          async buildPlan() {
+            this.savePreferences();
+            this.plan = await this.api("/api/plans/tomorrow", {
+              method: "POST",
+              body: JSON.stringify({ limit: 20, preferred_locations: this.preferredLocations() })
+            });
+          },
+          async evaluateBatch() {
+            this.busy = true;
+            this.notice = "正在批量评估候选岗位...";
+            try {
+              const result = await this.api("/api/jobs/evaluate-batch", {
+                method: "POST",
+                body: JSON.stringify({ ...this.searchPayload(), limit: 20 })
+              });
+              this.notice = `批量评估完成:${result.evaluated?.length || 0} 个岗位。`;
+              await this.refreshAll();
+            } catch (error) {
+              this.notice = error.message;
+            } finally {
+              this.busy = false;
+            }
+          },
+          async markApplied(item) {
+            await this.api(`/api/applications/${this.applicationId(item)}/mark-applied`, { method: "POST", body: "{}" });
+            this.removeCandidate(item);
+            await this.refreshAll();
+          },
+          async importHandoff(event, item) {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            if (!file) return;
+            try {
+              const packageData = JSON.parse(await file.text());
+              const result = await this.api(`/api/applications/${this.applicationId(item)}/handoffs`, {
+                method: "POST", body: JSON.stringify({ package: packageData })
+              });
+              this.notice = result.message;
+              await this.openDossier(item);
+            } catch (error) {
+              this.notice = `导入评估包失败：${error.message}`;
+            }
+          },
+          async importArtifacts(event, item) {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            if (!file) return;
+            try {
+              const manifest = JSON.parse(await file.text());
+              const result = await this.api(`/api/applications/${this.applicationId(item)}/artifacts`, {
+                method: "POST", body: JSON.stringify({ manifest })
+              });
+              this.notice = result.message;
+              await this.openDossier(item);
+            } catch (error) {
+              this.notice = `绑定简历产物失败：${error.message}`;
+            }
+          },
+          async openDossier(item) {
+            try {
+              this.dossier = await this.api(`/api/applications/${this.applicationId(item)}/dossier`);
+            } catch (error) {
+              this.notice = `读取投递档案失败：${error.message}`;
+            }
+          },
+          downloadArchive() {
+            window.location.assign("/api/export/portable");
+          },
+          async ignore(item) {
+            await this.api(`/api/applications/${this.applicationId(item)}/ignore`, { method: "POST", body: "{}" });
+            this.removeCandidate(item);
+            await this.refreshAll();
+          },
+          async markReplyHandled(item) {
+            await this.api(`/api/applications/${item.application_id}/mark-reply-handled`, { method: "POST", body: "{}" });
+            await this.refreshReplies();
+          },
+          async reclassifyReply(item, intent) {
+            await this.api(`/api/applications/${item.application_id}/reclassify`, {
+              method: "POST",
+              body: JSON.stringify({ intent })
+            });
+            await this.refreshAll();
+          },
+          async ignoreReply(item) {
+            await this.api(`/api/applications/${item.application_id}/ignore`, { method: "POST", body: "{}" });
+            await this.api(`/api/applications/${item.application_id}/mark-reply-handled`, { method: "POST", body: "{}" });
+            await this.refreshAll();
+          },
+          removeCandidate(item) {
+            const targetId = this.candidateKey(item);
+            this.candidates = this.candidates.filter((candidate) => this.candidateKey(candidate) !== targetId);
+          },
+          candidateKey(item) {
+            return String(item.application_id || item.job_id || item.id || "");
+          },
+          applicationId(item) {
+            const id = item?.application_id || item?.id;
+            if (!id) throw new Error("候选岗位缺少投递记录 ID，无法更新状态。");
+            return id;
+          },
+          candidateEndpoint() {
+            const batchId = this.currentSearchBatchId || "__no_current_search_batch__";
+            return `/api/candidates?batch_id=${encodeURIComponent(batchId)}`;
+          },
+          filterVisibleCandidates(items) {
+            return items || [];
+          },
+          rememberCurrentSearchBatch(batchId) {
+            if (!batchId) return;
+            this.currentSearchBatchId = String(batchId);
+            localStorage.setItem("resumatch.currentSearchBatch", JSON.stringify({
+              date: this.localDateKey(),
+              batch_id: this.currentSearchBatchId
+            }));
+          },
+          loadCurrentSearchBatch() {
+            localStorage.removeItem("resumatch.hiddenCandidates");
+            try {
+              const stored = JSON.parse(localStorage.getItem("resumatch.currentSearchBatch") || "{}");
+              this.currentSearchBatchId = stored.date === this.localDateKey() ? String(stored.batch_id || "") : "";
+            } catch {
+              this.currentSearchBatchId = "";
+            }
+          },
+          localDateKey() {
+            return new Intl.DateTimeFormat("en-CA", {
+              timeZone: "Asia/Shanghai",
+              year: "numeric",
+              month: "2-digit",
+              day: "2-digit"
+            }).format(new Date());
+          },
+          async copyGreeting(item) {
+            const text = item.greeting_draft || "";
+            if (!text) {
+              this.notice = "这个岗位还没有招呼语草稿。";
+              return;
+            }
+            await navigator.clipboard.writeText(text);
+            this.notice = "招呼语已复制。";
+          },
+          openAnalyze(job) {
+            this.messageJob = job;
+            this.conversationText = "";
+            this.analysis = "";
+          },
+          closeAnalyze() {
+            this.messageJob = null;
+            this.conversationText = "";
+            this.analysis = "";
+          },
+          async analyzeConversation() {
+            const conversation = this.conversationText
+              .split("\n")
+              .map((line) => {
+                const [senderRaw, ...rest] = line.split(":");
+                return {
+                  sender: senderRaw.trim() === "me" ? "me" : "hr",
+                  text: rest.join(":").trim(),
+                  sent_at: new Date().toISOString()
+                };
+              })
+              .filter((item) => item.text);
+            const result = await this.api("/api/messages/analyze", {
+              method: "POST",
+              body: JSON.stringify({ application_id: this.messageJob.application_id, conversation })
+            });
+            this.analysis = JSON.stringify(result, null, 2);
+            await this.refreshAll();
+          },
+          formatMetaLine(item) {
+            const companySize = item.company_kind === "hunter"
+              ? "\u730e\u5934\u5c97\u4f4d"
+              : (item.company_size || "\u89c4\u6a21\u672a\u9a8c\u8bc1");
+            return [
+              item.company || "未知公司",
+              item.location || "地点未标注",
+              item.salary || "薪资未标注",
+              companySize
+            ].filter(Boolean).join(" · ");
+          },
+          visibleRiskFlags(item) {
+            return (item.risk_flags || [])
+              .filter((flag) => !["remote_worker_unavailable", "worker_unavailable", "experience_over_limit"].includes(flag))
+              .map((flag) => this.flagLabel(flag));
+          },
+          visibleRejectReasons(item) {
+            return (item.reject_reasons || []).filter((reason) => reason && !/experience|年限|经验/i.test(String(reason)));
+          },
+          filterReasonText(summary) {
+            return this.countText(summary?.filtered_reason_counts || {}, {
+              invalid_job: "无效岗位",
+              title_or_keyword_miss: "标题/关键词不匹配",
+              salary_below_minimum: "薪资低于下限",
+              salary_above_maximum: "薪资高于上限",
+              salary_out_of_range: "薪资不在范围内"
+            });
+          },
+          softFlagText(summary) {
+            return this.countText(summary?.soft_flag_counts || {}, {
+              company_size_missing: "公司规模未抓到",
+              company_size_below_minimum: "公司规模偏小",
+              company_size_above_maximum: "公司规模偏大"
+            });
+          },
+          citySummaryText(summary) {
+            return (summary?.city_summary || [])
+              .filter((item) => item?.location)
+              .map((item) => `${item.location} 返回 ${Number(item.returned || 0)} 个，地点命中 ${Number(item.matched || 0)} 个`);
+          },
+          cityMismatchCount(summary) {
+            return (summary?.city_summary || []).reduce((total, item) => total + Number(item?.mismatched || 0), 0);
+          },
+          countText(counts, labels) {
+            return Object.entries(labels)
+              .map(([key, label]) => ({ label, count: Number(counts[key] || 0) }))
+              .filter((item) => item.count > 0)
+              .map((item) => `${item.label} ${item.count} 个`);
+          },
+          flagLabel(flag) {
+            const labels = {
+              location_not_preferred: "地点不在偏好内",
+              company_size_missing: "公司规模未抓到",
+              company_size_below_minimum: "公司规模偏小",
+              company_size_above_maximum: "公司规模偏大",
+              direction_mismatch: "方向关键词不够明确",
+              salary_below_minimum: "薪资低于下限",
+              salary_above_maximum: "薪资高于上限",
+              outsourcing_risk: "疑似外包/驻场",
+              keyword_mismatch: "关键词命中较弱",
+              daily_recommendation_limit_reached: "已达到今日推荐上限"
+            };
+            return labels[flag] || flag;
+          },
+          formatRate(value) {
+            return value == null ? "-" : `${Math.round(Number(value) * 100)}%`;
+          },
+          formatDateTime(value) {
+            if (!value) {
+              return "未记录";
+            }
+            return String(value).replace("T", " ").slice(0, 16);
+          },
+          queueLabel(status) {
+            const labels = {
+              recommended: "推荐投",
+              needs_review: "需人工判断",
+              not_recommended: "不建议投"
+            };
+            return labels[status] || "需人工判断";
+          },
+          queueClass(status) {
+            if (status === "recommended") return "bg-emerald-50 text-emerald-700";
+            if (status === "not_recommended") return "bg-rose-50 text-rose-700";
+            return "bg-amber-50 text-amber-700";
+          },
+          collectorScript() {
+            return "当前主流程已经是扩展自动抓取,这里只保留兜底说明。";
+          },
+          async copyCollectorScript() {
+            await navigator.clipboard.writeText(this.collectorScript());
+            this.notice = "兜底说明已复制。";
+          },
+          preferredLocations() {
+            return this.search.locations_text
+              .split(/[,，、;；\s]+/)
+              .map((item) => item.trim())
+              .filter(Boolean);
+          },
+          searchPayload() {
+            return {
+              jd_keywords: this.jdKeywords(),
+              job_titles: this.jobTitles(),
+              locations: this.preferredLocations(),
+              salary_min: this.search.salary_min,
+              salary_max: this.search.salary_max,
+              company_size_min: this.search.company_size_min,
+              company_size_max: this.search.company_size_max,
+              daily_recommendation_limit: this.search.daily_recommendation_limit,
+              pages: this.search.pages,
+              task_offset: Date.now()
+            };
+          },
+          historyPayload() {
+            const limit = Math.max(1, Math.min(Number(this.history.limit || 200), 200));
+            if (this.history.range === "custom") {
+              return {
+                start: this.history.start ? new Date(this.history.start).toISOString() : "",
+                end: this.history.end ? new Date(this.history.end).toISOString() : "",
+                limit
+              };
+            }
+            return {
+              range: this.history.range,
+              limit
+            };
+          },
+          historyQuery() {
+            const query = this.historyPayload();
+            if (this.history.includeSupplement) {
+              query.include_supplement = "1";
+            }
+            return query;
+          },
+          jdKeywords() {
+            return this.search.jd_keywords_text
+              .split(/[,,。\s]+/)
+              .map((item) => item.trim())
+              .filter(Boolean);
+          },
+          jobTitles() {
+            return this.search.job_titles_text
+              .split(/[,,。\n\r\t]+/)
+              .map((item) => item.trim())
+              .filter(Boolean);
+          },
+          loadPreferences() {
+            try {
+              const stored = JSON.parse(localStorage.getItem("resumatch.workbench.preferences") || "{}");
+              this.search.job_titles_text = stored.job_titles_text || this.search.job_titles_text;
+              this.search.jd_keywords_text = stored.jd_keywords_text || this.search.jd_keywords_text;
+              this.search.locations_text = stored.locations_text || this.search.locations_text;
+              this.search.salary_min = stored.salary_min || "";
+              this.search.salary_max = stored.salary_max || "";
+              this.search.company_size_min = stored.company_size_min || "";
+              this.search.company_size_max = stored.company_size_max || "";
+              this.search.daily_recommendation_limit = stored.daily_recommendation_limit || "20";
+              this.search.pages = Number(stored.pages || this.search.pages);
+              this.history.range = stored.history_range || "30";
+              this.history.limit = Number(stored.history_limit || 200);
+              this.history.start = stored.history_start || "";
+              this.history.end = stored.history_end || "";
+              this.history.includeSupplement = Boolean(stored.history_include_supplement);
+            } catch {}
+          },
+          savePreferences() {
+            localStorage.setItem("resumatch.workbench.preferences", JSON.stringify({
+              job_titles_text: this.search.job_titles_text,
+              jd_keywords_text: this.search.jd_keywords_text,
+              locations_text: this.search.locations_text,
+              salary_min: this.search.salary_min,
+              salary_max: this.search.salary_max,
+              company_size_min: this.search.company_size_min,
+              company_size_max: this.search.company_size_max,
+              daily_recommendation_limit: this.search.daily_recommendation_limit,
+              pages: this.search.pages,
+              history_range: this.history.range,
+              history_limit: this.history.limit,
+              history_start: this.history.start,
+              history_end: this.history.end,
+              history_include_supplement: this.history.includeSupplement
+            }));
+          }
+        }
+      }).mount("#app");
+    </script>
+  </body>
+</html>

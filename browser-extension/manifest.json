@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "ResuMatch \u6295\u9012\u540c\u6b65",
+  "version": "0.3.1",
+  "description": "\u628a Boss \u5c97\u4f4d\u548c\u56de\u590d\u540c\u6b65\u5230\u672c\u5730\u5de5\u4f5c\u53f0\u3002",
+  "action": {
+    "default_title": "ResuMatch \u6295\u9012\u540c\u6b65",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "permissions": [
+    "activeTab",
+    "tabs",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://www.zhipin.com/*",
+    "http://127.0.0.1:8788/*",
+    "https://telemetry.example.invalid/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.zhipin.com/*",
+        "http://127.0.0.1:8788/*"
+      ],
+      "js": [
+        "content-script.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
