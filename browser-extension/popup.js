@@ -194,7 +194,7 @@ async function initialize() {
     "telemetry_enabled",
     "workbench_api_token"
   ]);
-  telemetryEnabledEl.checked = telemetryEnabled !== false;
+  telemetryEnabledEl.checked = telemetryEnabled === true;
   workbenchTokenEl.value = workbenchToken || "";
   toggleCustomRange();
   setStatus(statusEl, TEXT.waitingSync, "");

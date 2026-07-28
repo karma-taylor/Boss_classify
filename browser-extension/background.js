@@ -136,11 +136,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return false;
     }
 
-    if (message?.type === "telemetryError") {
-      void trackEvent("error_triggered", {
-        error_type: message.error_type,
-        source: "content_script"
-      });
+    if (message?.type === "telemetry_event") {
+      // Content scripts may only request an event. The background remains the
+      // sole network boundary and telemetry.js drops every unapproved field.
+      if (sender.id === chrome.runtime.id) {
+        void trackEvent(message.event, message.properties || {});
+      }
       sendResponse({ ok: true });
       return false;
     }

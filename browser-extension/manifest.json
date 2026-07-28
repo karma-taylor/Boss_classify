@@ -24,7 +24,8 @@
   ],
   "host_permissions": [
     "https://www.zhipin.com/*",
-    "http://127.0.0.1:8788/*"
+    "http://127.0.0.1:8788/*",
+    "https://us.i.posthog.com/*"
   ],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self';"

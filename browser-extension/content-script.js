@@ -1005,7 +1005,14 @@
     if (telemetryErrorsReported.has(errorType)) return;
     telemetryErrorsReported.add(errorType);
     try {
-      chrome.runtime.sendMessage({ type: "telemetryError", error_type: errorType });
+      chrome.runtime.sendMessage({
+        type: "telemetry_event",
+        event: "error_triggered",
+        properties: {
+          error_type: errorType,
+          source: "content_script"
+        }
+      });
     } catch {}
   }
 

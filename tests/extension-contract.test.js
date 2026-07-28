@@ -7,16 +7,22 @@ const contentScript = fs.readFileSync(path.join(process.cwd(), "browser-extensio
 const backgroundScript = fs.readFileSync(path.join(process.cwd(), "browser-extension", "background.js"), "utf8");
 const popupScript = fs.readFileSync(path.join(process.cwd(), "browser-extension", "popup.js"), "utf8");
 const telemetryScript = fs.readFileSync(path.join(process.cwd(), "browser-extension", "telemetry.js"), "utf8");
+const manifest = JSON.parse(fs.readFileSync(path.join(process.cwd(), "browser-extension", "manifest.json"), "utf8"));
 
 test("telemetry is disabled by default and only accepts allowlisted anonymous properties", () => {
-  assert.match(telemetryScript, /const EVENT_PROPERTIES/);
-  assert.match(telemetryScript, /export const TELEMETRY_ENDPOINT = ""/);
-  assert.match(telemetryScript, /return enabled === true && isValidTelemetryEndpoint/);
+  assert.match(telemetryScript, /const POSTHOG_PROJECT_API_KEY = ""/);
+  assert.match(telemetryScript, /https:\/\/us\.i\.posthog\.com\/i\/v0\/e\//);
+  assert.match(telemetryScript, /return enabled === true && isPosthogConfigured/);
+  assert.match(telemetryScript, /\$process_person_profile: false/);
   assert.match(telemetryScript, /crypto\.randomUUID\(\)/);
-  assert.match(telemetryScript, /method: "POST"/);
-  assert.match(telemetryScript, /keys\.some\(\(key\) => !allowedProperties\.includes\(key\)\)/);
+  assert.match(telemetryScript, /function pickAllowedProperties/);
+  assert.doesNotMatch(telemetryScript, /\.\.\.properties/);
   assert.doesNotMatch(telemetryScript, /window\.location|document\.|conversation|chat_content|hr_name/);
-  assert.match(popupScript, /telemetry_enabled/);
+  assert.match(popupScript, /telemetryEnabledEl\.checked = telemetryEnabled === true/);
+  assert.match(backgroundScript, /message\?\.type === "telemetry_event"/);
+  assert.match(contentScript, /type: "telemetry_event"/);
+  assert.doesNotMatch(contentScript, /from "\.\/telemetry\.js"/);
+  assert.ok(manifest.host_permissions.includes("https://us.i.posthog.com/*"));
 });
 
 test("extension keeps Boss attachment resume cards as inbound HR messages", () => {
