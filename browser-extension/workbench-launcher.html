@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ResuMatch 工作台启动器</title>
+    <style>
+      :root {
+        --ink: #17202b;
+        --muted: #5b6776;
+        --panel: rgba(255, 255, 255, 0.96);
+        --line: #d7e0ea;
+        --blue: #2563eb;
+        --amber: #d97706;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: radial-gradient(circle at top, #f8fbff 0%, #f4f7fb 55%, #edf2f8 100%);
+        color: var(--ink);
+        font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      }
+
+      .panel {
+        width: min(560px, calc(100vw - 32px));
+        padding: 28px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: var(--panel);
+        box-shadow: 0 24px 48px rgba(23, 32, 43, 0.12);
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 28px;
+        line-height: 1.15;
+      }
+
+      p {
+        margin: 12px 0 0;
+        color: var(--muted);
+        font-size: 15px;
+        line-height: 1.7;
+      }
+
+      .status {
+        margin-top: 22px;
+        padding: 14px 16px;
+        border-radius: 12px;
+        background: #f8fafc;
+        color: var(--blue);
+        font-weight: 700;
+        line-height: 1.6;
+        white-space: pre-wrap;
+      }
+
+      .status.warn {
+        color: var(--amber);
+      }
+
+      .bar {
+        height: 8px;
+        margin-top: 18px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: #e8eef6;
+      }
+
+      .bar > span {
+        display: block;
+        width: 28%;
+        height: 100%;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #1d4ed8 0%, #3b82f6 100%);
+        animation: pulse 1.2s ease-in-out infinite;
+      }
+
+      .actions {
+        display: flex;
+        gap: 12px;
+        margin-top: 18px;
+      }
+
+      button,
+      a {
+        appearance: none;
+        border-radius: 10px;
+        padding: 12px 14px;
+        font-size: 14px;
+        font-weight: 700;
+        text-decoration: none;
+      }
+
+      button {
+        border: 0;
+        background: var(--blue);
+        color: #fff;
+        cursor: pointer;
+      }
+
+      a {
+        border: 1px solid var(--line);
+        background: #fff;
+        color: var(--ink);
+      }
+
+      @keyframes pulse {
+        0% { transform: translateX(-10%); opacity: 0.7; }
+        50% { transform: translateX(220%); opacity: 1; }
+        100% { transform: translateX(360%); opacity: 0.7; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="panel">
+      <h1>正在打开 ResuMatch 工作台</h1>
+      <p>这个启动页会先等本地服务真正起来，再跳转到工作台，避免你一上来就看到 127.0.0.1 拒绝连接。</p>
+      <div id="status" class="status">正在等待 http://127.0.0.1:8788 就绪...</div>
+      <div class="bar" aria-hidden="true"><span></span></div>
+      <div class="actions">
+        <button id="retry" type="button">重新检查</button>
+        <a id="open" href="http://127.0.0.1:8788" target="_self">直接打开</a>
+      </div>
+    </main>
+    <script src="workbench-launcher.js"></script>
+  </body>
+</html>
