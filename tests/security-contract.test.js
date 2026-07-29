@@ -15,6 +15,8 @@ test("API requires explicit extension IDs and a capability token", () => {
   assert.match(server, /x-workbench-token/);
   assert.match(server, /timingSafeEqual/);
   assert.doesNotMatch(server, /\^chrome-extension:\\\/\\\[a-p\]/);
+  assert.match(server, /loadLocalWorkbenchEnv/);
+  assert.match(server, /process\.env\[match\[1\]\]/);
 });
 
 test("workbench and extension send the capability token", () => {
