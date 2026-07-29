@@ -1230,7 +1230,12 @@
           loadPreferences() {
             try {
               const stored = JSON.parse(localStorage.getItem("resumatch.workbench.preferences") || "{}");
-              this.search.search_terms_text = stored.search_terms_text || this.search.search_terms_text;
+              const legacyCopiedSearchTerms = stored.search_terms_migrated !== true &&
+                stored.search_terms_text &&
+                stored.search_terms_text === stored.job_titles_text;
+              this.search.search_terms_text = legacyCopiedSearchTerms
+                ? this.search.search_terms_text
+                : (stored.search_terms_text || this.search.search_terms_text);
               this.search.job_titles_text = stored.job_titles_text || this.search.job_titles_text;
               this.search.jd_keywords_text = stored.jd_keywords_text || this.search.jd_keywords_text;
               this.search.locations_text = stored.locations_text || this.search.locations_text;
@@ -1250,6 +1255,7 @@
           savePreferences() {
             localStorage.setItem("resumatch.workbench.preferences", JSON.stringify({
               search_terms_text: this.search.search_terms_text,
+              search_terms_migrated: true,
               job_titles_text: this.search.job_titles_text,
               jd_keywords_text: this.search.jd_keywords_text,
               locations_text: this.search.locations_text,
