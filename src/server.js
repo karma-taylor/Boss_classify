@@ -163,7 +163,7 @@ app.post("/api/jobs/import", async (req, res) => {
       if (!filterResult.passed) {
         filteredOut += 1;
         addCounts(filteredReasonCounts, filterResult.reasons);
-        serverFilterLogs.push({ source_url: sourceUrl, title, salary: item?.salary, location: item?.location, reasons: filterResult.reasons });
+        serverFilterLogs.push({ source_url: sourceUrl, title, salary: item?.salary, location: item?.location, reasons: filterResult.reasons, reason_details: filterResult.details });
         continue;
       }
 
