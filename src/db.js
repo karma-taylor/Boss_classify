@@ -134,6 +134,7 @@ export function migrate(db) {
       salary TEXT NOT NULL DEFAULT '',
       location TEXT NOT NULL DEFAULT '',
       reason_codes_json TEXT NOT NULL DEFAULT '[]',
+      reason_details_json TEXT NOT NULL DEFAULT '{}',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(search_batch_id, entry_key)
     );
@@ -241,6 +242,7 @@ export function migrate(db) {
   `);
 
   addColumnIfMissing(db, "jobs", "company_size", "TEXT NOT NULL DEFAULT ''");
+  addColumnIfMissing(db, "collection_filter_logs", "reason_details_json", "TEXT NOT NULL DEFAULT '{}'");
   addColumnIfMissing(db, "jobs", "company_kind", "TEXT NOT NULL DEFAULT 'unknown'");
   addColumnIfMissing(db, "jobs", "company_size_source", "TEXT NOT NULL DEFAULT 'unverified'");
   // Legacy list-card extraction cannot distinguish job text from company data.
@@ -434,8 +436,8 @@ export function recordCollectionFilterLogs(db, { searchBatchId, items = [] } = {
   if (!batchId || !Array.isArray(items) || !items.length) return { recorded: 0 };
   const insert = db.prepare(`
     INSERT OR IGNORE INTO collection_filter_logs (
-      search_batch_id, entry_key, source_url, title, salary, location, reason_codes_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      search_batch_id, entry_key, source_url, title, salary, location, reason_codes_json, reason_details_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
   let recorded = 0;
   db.exec("BEGIN");
@@ -449,9 +451,10 @@ export function recordCollectionFilterLogs(db, { searchBatchId, items = [] } = {
       const title = String(item?.title || "").trim().slice(0, 240);
       const salary = String(item?.salary || "").trim().slice(0, 120);
       const location = String(item?.location || "").trim().slice(0, 120);
+      const details = normalizeFilterLogDetails(item?.reason_details);
       const entryKey = sourceUrl || `${title}|${salary}|${location}|${reasons.join(",")}`;
       if (!entryKey) continue;
-      recorded += Number(insert.run(batchId, entryKey, sourceUrl, title, salary, location, JSON.stringify(reasons)).changes || 0);
+      recorded += Number(insert.run(batchId, entryKey, sourceUrl, title, salary, location, JSON.stringify(reasons), JSON.stringify(details)).changes || 0);
     }
     db.exec("COMMIT");
   } catch (error) {
@@ -465,7 +468,7 @@ export function getCollectionFilterLogs(db, searchBatchId, limit = 200) {
   const batchId = String(searchBatchId || "").trim().slice(0, 120);
   if (!batchId) return { search_batch_id: "", total: 0, reason_counts: {}, entries: [] };
   const rows = db.prepare(`
-    SELECT source_url, title, salary, location, reason_codes_json, created_at
+    SELECT source_url, title, salary, location, reason_codes_json, reason_details_json, created_at
     FROM collection_filter_logs
     WHERE search_batch_id = ?
     ORDER BY id DESC
@@ -475,13 +478,37 @@ export function getCollectionFilterLogs(db, searchBatchId, limit = 200) {
   const reasonCounts = {};
   const entries = rows.map((row) => {
     let reasons = [];
+    let reasonDetails = {};
     try { reasons = JSON.parse(row.reason_codes_json || "[]"); } catch {}
+    try { reasonDetails = JSON.parse(row.reason_details_json || "{}"); } catch {}
     for (const reason of Array.isArray(reasons) ? reasons : []) {
       reasonCounts[reason] = Number(reasonCounts[reason] || 0) + 1;
     }
-    return { ...row, reasons: Array.isArray(reasons) ? reasons : [] };
+    return { ...row, reasons: Array.isArray(reasons) ? reasons : [], reason_details: reasonDetails && typeof reasonDetails === "object" ? reasonDetails : {} };
   });
   return { search_batch_id: batchId, total, reason_counts: reasonCounts, entries };
+}
+
+function normalizeFilterLogDetails(value) {
+  const details = value && typeof value === "object" ? value : {};
+  const safeTerms = (items) => Array.isArray(items)
+    ? items.map((item) => String(item || "").trim().slice(0, 80)).filter(Boolean).slice(0, 10)
+    : [];
+  const numeric = (item) => Number.isFinite(Number(item)) ? Number(item) : null;
+  const parsedSalary = details.parsed_salary && typeof details.parsed_salary === "object"
+    ? { min: numeric(details.parsed_salary.min), max: numeric(details.parsed_salary.max) }
+    : null;
+  return {
+    title_match: details.title_match === true,
+    keyword_match: details.keyword_match === true,
+    salary_match: details.salary_match === true,
+    job_salary: String(details.job_salary || "").trim().slice(0, 120),
+    parsed_salary: parsedSalary,
+    required_salary_min: numeric(details.required_salary_min),
+    required_salary_max: numeric(details.required_salary_max),
+    target_directions: safeTerms(details.target_directions),
+    jd_keywords: safeTerms(details.jd_keywords)
+  };
 }
 
 export function ensureApplication(db, jobId) {
