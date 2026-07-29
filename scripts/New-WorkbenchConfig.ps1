@@ -14,7 +14,13 @@ if ((Test-Path -LiteralPath $envFile) -and -not $Force) {
 }
 
 $bytes = New-Object byte[] 32
-[Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+$rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+try {
+  # GetBytes works in both Windows PowerShell 5.1 and newer PowerShell versions.
+  $rng.GetBytes($bytes)
+} finally {
+  $rng.Dispose()
+}
 $token = [Convert]::ToBase64String($bytes).TrimEnd("=").Replace("+", "-").Replace("/", "_")
 
 @(

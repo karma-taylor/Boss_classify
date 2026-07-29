@@ -7,6 +7,7 @@ const server = fs.readFileSync(path.join(process.cwd(), "src", "server.js"), "ut
 const background = fs.readFileSync(path.join(process.cwd(), "browser-extension", "background.js"), "utf8");
 const contentScript = fs.readFileSync(path.join(process.cwd(), "browser-extension", "content-script.js"), "utf8");
 const page = fs.readFileSync(path.join(process.cwd(), "public", "index.html"), "utf8");
+const configScript = fs.readFileSync(path.join(process.cwd(), "scripts", "New-WorkbenchConfig.ps1"), "utf8");
 
 test("API requires explicit extension IDs and a capability token", () => {
   assert.match(server, /WORKBENCH_EXTENSION_IDS/);
@@ -21,6 +22,12 @@ test("workbench and extension send the capability token", () => {
   assert.match(page, /WORKBENCH_API_TOKEN/);
   assert.match(background, /X-Workbench-Token/);
   assert.match(background, /workbench_token_missing/);
+});
+
+test("configuration script generates a token on Windows PowerShell 5.1", () => {
+  assert.match(configScript, /RandomNumberGenerator\]::Create\(\)/);
+  assert.match(configScript, /\$rng\.GetBytes\(\$bytes\)/);
+  assert.doesNotMatch(configScript, /RandomNumberGenerator\]::Fill/);
 });
 
 test("workbench uses local vendor assets and content-script errors are structured", () => {
