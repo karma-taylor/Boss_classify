@@ -125,6 +125,21 @@ export function migrate(db) {
       finished_at TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS collection_filter_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      search_batch_id TEXT NOT NULL,
+      entry_key TEXT NOT NULL,
+      source_url TEXT NOT NULL DEFAULT '',
+      title TEXT NOT NULL DEFAULT '',
+      salary TEXT NOT NULL DEFAULT '',
+      location TEXT NOT NULL DEFAULT '',
+      reason_codes_json TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(search_batch_id, entry_key)
+    );
+    CREATE INDEX IF NOT EXISTS idx_collection_filter_logs_batch
+      ON collection_filter_logs(search_batch_id, created_at DESC);
+
     CREATE TABLE IF NOT EXISTS history_sync_runs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       status TEXT NOT NULL DEFAULT 'running',
@@ -412,6 +427,61 @@ export function normalizeStoredJobs(db) {
       jd_hash: hashText(normalized.jd_text || normalized.source_url)
     });
   }
+}
+
+export function recordCollectionFilterLogs(db, { searchBatchId, items = [] } = {}) {
+  const batchId = String(searchBatchId || "").trim().slice(0, 120);
+  if (!batchId || !Array.isArray(items) || !items.length) return { recorded: 0 };
+  const insert = db.prepare(`
+    INSERT OR IGNORE INTO collection_filter_logs (
+      search_batch_id, entry_key, source_url, title, salary, location, reason_codes_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+  let recorded = 0;
+  db.exec("BEGIN");
+  try {
+    for (const item of items) {
+      const reasons = [...new Set((Array.isArray(item?.reasons) ? item.reasons : [])
+        .map((reason) => String(reason || "").trim().slice(0, 80))
+        .filter(Boolean))].slice(0, 8);
+      if (!reasons.length) continue;
+      const sourceUrl = String(item?.source_url || "").trim().slice(0, 1000);
+      const title = String(item?.title || "").trim().slice(0, 240);
+      const salary = String(item?.salary || "").trim().slice(0, 120);
+      const location = String(item?.location || "").trim().slice(0, 120);
+      const entryKey = sourceUrl || `${title}|${salary}|${location}|${reasons.join(",")}`;
+      if (!entryKey) continue;
+      recorded += Number(insert.run(batchId, entryKey, sourceUrl, title, salary, location, JSON.stringify(reasons)).changes || 0);
+    }
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+  return { recorded };
+}
+
+export function getCollectionFilterLogs(db, searchBatchId, limit = 200) {
+  const batchId = String(searchBatchId || "").trim().slice(0, 120);
+  if (!batchId) return { search_batch_id: "", total: 0, reason_counts: {}, entries: [] };
+  const rows = db.prepare(`
+    SELECT source_url, title, salary, location, reason_codes_json, created_at
+    FROM collection_filter_logs
+    WHERE search_batch_id = ?
+    ORDER BY id DESC
+    LIMIT ?
+  `).all(batchId, Math.max(1, Math.min(Number(limit) || 200, 500)));
+  const total = Number(db.prepare("SELECT COUNT(*) AS count FROM collection_filter_logs WHERE search_batch_id = ?").get(batchId).count || 0);
+  const reasonCounts = {};
+  const entries = rows.map((row) => {
+    let reasons = [];
+    try { reasons = JSON.parse(row.reason_codes_json || "[]"); } catch {}
+    for (const reason of Array.isArray(reasons) ? reasons : []) {
+      reasonCounts[reason] = Number(reasonCounts[reason] || 0) + 1;
+    }
+    return { ...row, reasons: Array.isArray(reasons) ? reasons : [] };
+  });
+  return { search_batch_id: batchId, total, reason_counts: reasonCounts, entries };
 }
 
 export function ensureApplication(db, jobId) {
