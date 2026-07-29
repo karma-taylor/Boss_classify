@@ -46,6 +46,7 @@ import { analyzeMessages, evaluateJob, generateGreetings } from "./workerClient.
 import { applyMessageAnalysis, buildTomorrowPlan, getPlan, overrideReplyIntent } from "./strategy.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+loadLocalWorkbenchEnv(path.join(__dirname, "..", ".env"));
 const port = Number(process.env.PORT || 8788);
 const WORKBENCH_TOKEN_HEADER = "x-workbench-token";
 const workbenchApiToken = requireWorkbenchApiToken();
@@ -640,6 +641,16 @@ function readExtensionIds() {
     throw new Error("Fatal Error: WORKBENCH_EXTENSION_IDS must contain one or more Chrome extension IDs.");
   }
   return [...new Set(ids)];
+}
+
+function loadLocalWorkbenchEnv(filePath) {
+  if (!fs.existsSync(filePath)) return;
+  for (const line of fs.readFileSync(filePath, "utf8").split(/\r?\n/)) {
+    const match = line.match(/^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*?)\s*$/);
+    if (!match || process.env[match[1]]) continue;
+    const value = match[2].replace(/^(["'])(.*)\1$/, "$2");
+    if (value) process.env[match[1]] = value;
+  }
 }
 
 function requireWorkbenchApiToken() {
