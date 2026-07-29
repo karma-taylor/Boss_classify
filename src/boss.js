@@ -5,7 +5,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const BOSS_SEARCH_URL = "https://www.zhipin.com/web/geek/jobs";
-const MAX_SEARCH_COMBINATIONS = 10;
+const MAX_SEARCH_COMBINATIONS = 30;
+const MIN_SEARCH_PAGES = 3;
 const JOB_LINK_SELECTOR = "a[href*='job_detail']";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIAGNOSTICS_DIR = path.join(__dirname, "..", "diagnostics");
@@ -104,28 +105,33 @@ export async function diagnoseBossTabs() {
 }
 
 export function buildBossSearchTasks(options = {}) {
-  const pageLimit = Math.max(1, Math.min(Number(options.pages || 3), 10));
+  const pageLimit = Math.max(MIN_SEARCH_PAGES, Math.min(Number(options.pages || MIN_SEARCH_PAGES), 10));
   const items = buildBossSearchUrls(options);
+  const searchTerms = splitTerms(options.search_terms || options.search_queries || options.job_titles || options.titles || options.title || options.jd_keywords || options.keywords);
+  const locations = splitTerms(options.locations || options.preferred_locations || options.location);
+  const requestedTaskCount = searchTerms.length * Math.max(locations.length, 1);
   return {
     page_limit: pageLimit,
     items,
+    requested_task_count: requestedTaskCount,
+    truncated_task_count: Math.max(0, requestedTaskCount - items.length),
     filters: normalizeFilters(options, splitTerms(options.jd_keywords || options.keywords))
   };
 }
 
 export function buildSearchItems(options = {}) {
-  const titles = splitTerms(options.job_titles || options.titles || options.title || options.jd_keywords || options.keywords || options.keyword);
+  const searchTerms = splitTerms(options.search_terms || options.search_queries || options.job_titles || options.titles || options.title || options.jd_keywords || options.keywords || options.keyword);
   const keywords = splitTerms(options.jd_keywords || options.keywords);
   const locations = splitTerms(options.locations || options.preferred_locations || options.location);
   const normalizedLocations = rotateLocations(locations.length ? locations : [""], options.task_offset);
   const filters = normalizeFilters(options, keywords);
   const items = [];
 
-  for (const title of titles) {
+  for (const searchTerm of searchTerms) {
     for (const location of normalizedLocations) {
       const cityCode = getBossCityCode(location);
-      const query = cityCode ? title : [location, title].filter(Boolean).join(" ");
-      items.push({ title, keywords, location, city_code: cityCode, query, filters });
+      const query = cityCode ? searchTerm : [location, searchTerm].filter(Boolean).join(" ");
+      items.push({ title: searchTerm, keywords, location, city_code: cityCode, query, filters });
     }
   }
 
@@ -274,9 +280,6 @@ async function extractVisibleJobs(page, searchItem = {}) {
       location: job.location || searchItem.location || "",
       jd_text: [
         job.jd_text,
-        searchItem.title ? `搜索岗位:${searchItem.title}` : "",
-        searchItem.keywords?.length ? `岗位关键词:${searchItem.keywords.join("、")}` : "",
-        searchItem.location ? `搜索地点:${searchItem.location}` : "",
         job.company_size ? `公司规模:${job.company_size}` : ""
       ].filter(Boolean).join(" ").slice(0, 3000),
       jd_hash: hashText(job.jd_text || job.source_url)
