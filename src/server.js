@@ -23,6 +23,7 @@ import {
   cleanupOldJobs,
   ensureSupplementApplication,
   finishHistorySyncRun,
+  getCollectionFilterLogs,
   getHistoryCoverage,
   getHistoryDailySummary,
   getHistorySummary,
@@ -33,6 +34,7 @@ import {
   normalizeStoredJobs,
   openDb,
   refreshDailyMetrics,
+  recordCollectionFilterLogs,
   setApplicationStatus,
   startHistorySyncRun,
   upsertJob
@@ -143,6 +145,7 @@ app.post("/api/jobs/import", async (req, res) => {
     const softFlagCounts = {};
     const importFilters = normalizeImportFilters(req.body || {});
     const searchBatchId = String(req.body?.search_batch_id || "").trim().slice(0, 120);
+    const serverFilterLogs = [];
 
     for (const item of items.slice(0, 500)) {
       const sourceUrl = String(item?.source_url || "").trim();
@@ -150,6 +153,7 @@ app.post("/api/jobs/import", async (req, res) => {
       if (!sourceUrl || !title || !isUsableJobTitle(title)) {
         filteredOut += 1;
         addCounts(filteredReasonCounts, ["invalid_job"]);
+        serverFilterLogs.push({ source_url: sourceUrl, title, salary: item?.salary, location: item?.location, reasons: ["invalid_job"] });
         continue;
       }
 
@@ -158,6 +162,7 @@ app.post("/api/jobs/import", async (req, res) => {
       if (!filterResult.passed) {
         filteredOut += 1;
         addCounts(filteredReasonCounts, filterResult.reasons);
+        serverFilterLogs.push({ source_url: sourceUrl, title, salary: item?.salary, location: item?.location, reasons: filterResult.reasons });
         continue;
       }
 
@@ -196,6 +201,7 @@ app.post("/api/jobs/import", async (req, res) => {
     }
 
     incrementReadMetric(db, saved.length);
+    const filterLogResult = recordCollectionFilterLogs(db, { searchBatchId, items: serverFilterLogs });
     const evaluated = await evaluateJobsForQueue(evaluationTargets, req.body || {});
     const evaluationSummary = summarizeEvaluationResults(evaluated);
     res.json({
@@ -212,6 +218,7 @@ app.post("/api/jobs/import", async (req, res) => {
       not_recommended_count: evaluationSummary.not_recommended_count,
       top_reject_reasons: evaluationSummary.top_reject_reasons,
       filtered_reason_counts: filteredReasonCounts,
+      filter_log_recorded: filterLogResult.recorded,
       soft_flag_counts: softFlagCounts,
       company_size_missing_count: softFlagCounts.company_size_missing || 0,
       evaluation_mode: "completed"
@@ -219,6 +226,23 @@ app.post("/api/jobs/import", async (req, res) => {
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
+});
+
+app.post("/api/collection/filter-logs", (req, res) => {
+  const searchBatchId = String(req.body?.search_batch_id || "").trim().slice(0, 120);
+  if (!searchBatchId) return res.status(400).json({ error: "search_batch_id_required" });
+  try {
+    res.json(recordCollectionFilterLogs(db, {
+      searchBatchId,
+      items: Array.isArray(req.body?.items) ? req.body.items.slice(0, 300) : []
+    }));
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.get("/api/collection/filter-logs", (req, res) => {
+  res.json(getCollectionFilterLogs(db, req.query?.batch_id, req.query?.limit));
 });
 
 app.get("/api/boss/diagnose-tabs", async (_req, res) => {
