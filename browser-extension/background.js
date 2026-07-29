@@ -406,7 +406,7 @@ async function runBossSearchBatch(requestId, port, payload) {
           const filterResult = analyzeJobFilters(job, task.filters || {}, { includeCompanySize: false });
           if (!filterResult.passed) {
             addCounts(filteredReasonCounts, filterResult.reasons);
-            filteredJobLogs.push(toFilterLogEntry(job, filterResult.reasons));
+            filteredJobLogs.push(toFilterLogEntry(job, filterResult, task.filters || {}));
             filteredOut += 1;
             continue;
           }
@@ -772,13 +772,27 @@ async function recordFilterLogs(searchBatchId, entries) {
   return recorded;
 }
 
-function toFilterLogEntry(job, reasons) {
+function toFilterLogEntry(job, filterResult, filters) {
   return {
     source_url: String(job?.source_url || ""),
     title: String(job?.title || ""),
     salary: String(job?.salary || ""),
     location: String(job?.location || ""),
-    reasons: Array.isArray(reasons) ? reasons : []
+    reasons: Array.isArray(filterResult?.reasons) ? filterResult.reasons : [],
+    reason_details: filterResult?.details || buildFilterLogDetails(job, filterResult, filters)
+  };
+}
+
+function buildFilterLogDetails(job, filterResult, filters) {
+  return {
+    title_match: Boolean(filterResult?.title_match),
+    keyword_match: Boolean(filterResult?.keyword_match),
+    salary_match: Boolean(filterResult?.salary_match),
+    job_salary: String(job?.salary || ""),
+    required_salary_min: filters?.salary_min ?? null,
+    required_salary_max: filters?.salary_max ?? null,
+    target_directions: Array.isArray(filters?.job_titles) ? filters.job_titles.slice(0, 10) : [],
+    jd_keywords: Array.isArray(filters?.jd_keywords) ? filters.jd_keywords.slice(0, 10) : []
   };
 }
 
@@ -883,7 +897,22 @@ function analyzeJobFilters(job, filters = {}, options = {}) {
   if (options.includeCompanySize !== false) {
     softFlags.push(...analyzeCompanySizePreference(job, filters));
   }
-  return { passed: intentOk && salaryOk, reasons, soft_flags: softFlags };
+  return {
+    passed: intentOk && salaryOk,
+    reasons,
+    soft_flags: softFlags,
+    details: {
+      title_match: titleOk,
+      keyword_match: keywordOk,
+      salary_match: salaryOk,
+      job_salary: String(job.salary || "").slice(0, 120),
+      parsed_salary: salaryRange,
+      required_salary_min: filters.salary_min || null,
+      required_salary_max: filters.salary_max || null,
+      target_directions: (filters.job_titles || []).slice(0, 10),
+      jd_keywords: (filters.jd_keywords || []).slice(0, 10)
+    }
+  };
 }
 
 async function enrichAcceptedJobCompanySizes(tabId, jobs, runId) {
