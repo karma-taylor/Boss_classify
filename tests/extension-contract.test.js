@@ -101,6 +101,14 @@ test("background normalizes Boss error pages and continues with later search tas
   assert.match(backgroundScript, /failed_task_count/);
 });
 
+test("Boss pagination falls back to a verified page URL and reports the stop reason", () => {
+  assert.match(backgroundScript, /advanceBossPageByUrl/);
+  assert.match(backgroundScript, /url\.searchParams\.set\("page", String\(nextPage\)\)/);
+  assert.match(backgroundScript, /Boss 未切换到下一页/);
+  assert.match(backgroundScript, /notifyPageStop/);
+  assert.match(contentScript, /\[class\*=page\] a/);
+});
+
 test("company size uses the company basic information card and identifies hunters", () => {
   assert.doesNotMatch(contentScript, /company_size: extractCompanySizeText\(card/);
   assert.match(contentScript, /function findCompanyBasicInfoCard/);
