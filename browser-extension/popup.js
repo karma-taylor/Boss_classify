@@ -67,7 +67,8 @@ const TEXT = {
   waitingHistory: "等待历史检索。",
   waitingSync: "等待同步。",
   channelClosed: "扩展消息通道已关闭，请刷新扩展或页面后重试。",
-  historyChannelClosed: "历史检索连接已关闭，请重试。"
+  historyChannelClosed: "历史检索连接已关闭，请重试。",
+  storageUnavailable: "扩展存储不可用。请到 chrome://extensions 刷新 ResuMatch 扩展后重试。"
 };
 
 const PAGE_TYPE_MAP = {
@@ -181,26 +182,42 @@ refreshHistorySummaryButton.addEventListener("click", async () => {
 
 historyRangeEl.addEventListener("change", toggleCustomRange);
 telemetryEnabledEl.addEventListener("change", async () => {
-  await chrome.storage.local.set({ telemetry_enabled: telemetryEnabledEl.checked });
+  await saveStorageValue({ telemetry_enabled: telemetryEnabledEl.checked });
 });
 workbenchTokenEl.addEventListener("change", async () => {
-  await chrome.storage.local.set({ workbench_api_token: workbenchTokenEl.value.trim() });
+  await saveStorageValue({ workbench_api_token: workbenchTokenEl.value.trim() });
 });
 
 void initialize();
 
 async function initialize() {
-  const { telemetry_enabled: telemetryEnabled, workbench_api_token: workbenchToken } = await chrome.storage.local.get([
+  const storage = getLocalStorage();
+  const stored = storage ? await storage.get([
     "telemetry_enabled",
     "workbench_api_token"
-  ]);
+  ]) : {};
+  const { telemetry_enabled: telemetryEnabled, workbench_api_token: workbenchToken } = stored;
   telemetryEnabledEl.checked = telemetryEnabled === true;
   workbenchTokenEl.value = workbenchToken || "";
   toggleCustomRange();
-  setStatus(statusEl, TEXT.waitingSync, "");
+  setStatus(statusEl, storage ? TEXT.waitingSync : TEXT.storageUnavailable, storage ? "" : "error");
   setStatus(healthStatusEl, TEXT.waitingHealth, "");
   setStatus(historyStatusEl, TEXT.waitingHistory, "");
   await Promise.allSettled([loadHistorySummary(), refreshHealth()]);
+}
+
+function getLocalStorage() {
+  return globalThis.chrome?.storage?.local || null;
+}
+
+async function saveStorageValue(value) {
+  const storage = getLocalStorage();
+  if (!storage) {
+    setStatus(statusEl, TEXT.storageUnavailable, "error");
+    return false;
+  }
+  await storage.set(value);
+  return true;
 }
 
 async function loadHistorySummary() {
