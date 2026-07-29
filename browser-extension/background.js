@@ -370,6 +370,7 @@ async function runBossSearchBatch(requestId, port, payload) {
   const candidateJobIds = new Set();
   let existingCount = 0;
   let notRecommendedCount = 0;
+  let failedTaskCount = 0;
   const filteredReasonCounts = {};
   const softFlagCounts = {};
   const companySizeEnrichment = createCompanySizeEnrichmentSummary();
@@ -445,6 +446,19 @@ async function runBossSearchBatch(requestId, port, payload) {
         const next = await sendTabMessage(tab.id, { type: "goBossNextPage" });
         if (!next?.ok || !next.hasNext) break;
       }
+    } catch (error) {
+      failedTaskCount += 1;
+      notifyWorkbench(port, "boss-search-progress", requestId, {
+        phase: "task_error",
+        message: `第 ${index + 1}/${tasks.length} 组未完成：${normalizeSearchTaskError(error)}；继续下一组。`,
+        task_index: index + 1,
+        task_total: tasks.length,
+        pages_scanned: pagesScanned,
+        kept: collectedJobs.length,
+        filtered_out: filteredOut,
+        deduped,
+        failed_task_count: failedTaskCount
+      });
     } finally {
       await chrome.tabs.remove(tab.id).catch(() => {});
     }
@@ -493,6 +507,7 @@ async function runBossSearchBatch(requestId, port, payload) {
     candidate_job_ids: [...candidateJobIds].filter(Number.isFinite),
     search_batch_id: requestId,
     not_recommended_count: notRecommendedCount,
+    failed_task_count: failedTaskCount,
     pages_scanned: pagesScanned,
     tasks_run: tasks.length,
     filtered_reason_counts: filteredReasonCounts,
@@ -694,6 +709,13 @@ async function sendTabMessage(tabId, message) {
 
 function normalizeChannelError(message) {
   if (
+    message.includes("Frame with ID 0 is showing error page") ||
+    message.includes("Frame with ID 0 was removed") ||
+    message.includes("chrome-error://")
+  ) {
+    return "Boss 页面打开失败，可能是网络异常、登录失效或平台风控拦截。";
+  }
+  if (
     message.includes("message channel closed") ||
     message.includes("Receiving end does not exist") ||
     message.includes("The message port closed before a response was received")
@@ -701,6 +723,10 @@ function normalizeChannelError(message) {
     return "Boss 页面通信中断,通常是页面刷新、跳转或内容脚本失效导致的,请重试。";
   }
   return message;
+}
+
+function normalizeSearchTaskError(error) {
+  return normalizeChannelError(String(error?.message || error || "采集任务失败"));
 }
 
 async function waitForTabComplete(tabId) {
