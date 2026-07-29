@@ -1562,8 +1562,13 @@
       if (element) return element;
     }
 
-    const candidates = [...document.querySelectorAll("button, a, span")];
-    return candidates.find((item) => /\u4e0b\u4e00\u9875?/.test(cleanText(item.textContent || ""))) || null;
+    const currentPage = getCurrentPageNumber();
+    const numberedPage = [...document.querySelectorAll("[class*=page] a, [class*=page] button, [class*=pagination] a, [class*=pagination] button")]
+      .find((item) => cleanText(item.textContent || "") === String((currentPage || 1) + 1) && !isDisabled(item));
+    if (numberedPage) return numberedPage;
+
+    const candidates = [...document.querySelectorAll("button, a, span, i")];
+    return candidates.find((item) => /\u4e0b\u4e00\u9875?|next/i.test(cleanText(item.textContent || "")) && isVisible(item)) || null;
   }
 
   function isDisabled(element) {
