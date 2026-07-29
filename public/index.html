@@ -101,6 +101,18 @@
       }
       button { border-radius: 10px !important; transition: transform .16s ease, box-shadow .16s ease; }
       button:not(:disabled):hover { transform: translateY(-1px); box-shadow: 0 5px 12px rgba(15, 35, 63, .12); }
+      .collect-button {
+        display: inline-flex;
+        min-height: 40px;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        background: var(--blue) !important;
+        color: #fff !important;
+        box-shadow: 0 8px 16px rgba(37, 99, 235, .22);
+      }
+      .collect-button::before { content: "↗"; font-size: 16px; font-weight: 900; }
+      .collect-hint { color: var(--muted); }
       @media (min-width: 960px) {
         header {
           display: grid;
@@ -241,10 +253,11 @@
                 <input v-model.number="search.pages" type="number" min="1" max="10" class="focus-ring mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
               </div>
               <div class="grid grid-cols-2 items-end gap-2">
-                <button class="focus-ring rounded-md bg-slate-950 px-3 py-2 text-sm font-bold text-white disabled:opacity-50" :disabled="busy" @click="runSearch">搜索</button>
-                <button class="focus-ring rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:opacity-50" :disabled="busy" @click="copyCollectorScript">复制采集脚本</button>
+                <button class="collect-button focus-ring px-3 py-2 text-sm font-bold disabled:opacity-50" :disabled="busy" @click="runSearch">开始采集岗位</button>
+                <button class="focus-ring rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:opacity-50" :disabled="busy" @click="copyCollectorScript">采集说明</button>
               </div>
             </div>
+            <p class="collect-hint mt-2 text-xs leading-5">在 Boss 页面完成关键词检索后，点击“开始采集岗位”将结果同步到候选队列。</p>
 
             <div v-if="searchSummary" class="mt-4 rounded-md border border-blue-100 bg-blue-50 p-3 text-xs leading-5 text-blue-900">
               <div class="font-bold">本次自动抓取摘要</div>
