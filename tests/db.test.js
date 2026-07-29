@@ -10,10 +10,12 @@ import {
   ensureSupplementApplication,
   getHistoryDailySummary,
   getHistorySummary,
+  getCollectionFilterLogs,
   insertMessageIfNew,
   insertReplyEventIfFirst,
   openDb,
   refreshDailyMetrics,
+  recordCollectionFilterLogs,
   setApplicationStatus,
   upsertJob
 } from "../src/db.js";
@@ -61,6 +63,23 @@ test("upsertJob stores verified company size metadata", () => {
   assert.equal(saved.company_size, "100-499人");
   assert.equal(saved.company_kind, "company");
   assert.equal(saved.company_size_source, "company_basic_info");
+  db.close();
+});
+
+test("collection filter logs persist local reasons without JD text", () => {
+  const db = openDb(tempDb());
+  const result = recordCollectionFilterLogs(db, {
+    searchBatchId: "batch-filter-log",
+    items: [
+      { source_url: "https://example.com/a", title: "产品经理", salary: "10-14K", location: "上海", reasons: ["salary_below_minimum"] },
+      { source_url: "https://example.com/b", title: "运营", salary: "20-30K", location: "深圳", reasons: ["title_or_keyword_miss"] }
+    ]
+  });
+  const logs = getCollectionFilterLogs(db, "batch-filter-log");
+  assert.equal(result.recorded, 2);
+  assert.equal(logs.total, 2);
+  assert.equal(logs.reason_counts.salary_below_minimum, 1);
+  assert.equal(logs.entries[0].jd_text, undefined);
   db.close();
 });
 
