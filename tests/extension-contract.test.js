@@ -25,6 +25,9 @@ test("telemetry is disabled by default and only accepts allowlisted anonymous pr
   assert.doesNotMatch(contentScript, /from "\.\/telemetry\.js"/);
   assert.ok(manifest.host_permissions.includes("https://us.i.posthog.com/*"));
   assert.ok(manifest.permissions.includes("storage"));
+  assert.match(popupScript, /function getLocalStorage\(\)/);
+  assert.match(popupScript, /globalThis\.chrome\?\.storage\?\.local \|\| null/);
+  assert.match(popupScript, /TEXT\.storageUnavailable/);
   assert.match(launcherScript, /chrome\.storage\.local\.get\("workbench_api_token"\)/);
   assert.match(launcherScript, /X-Workbench-Token/);
 });
