@@ -360,9 +360,13 @@
               <span class="rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-700">3-10 页</span>
             </div>
 
-            <label class="mt-4 block text-xs font-bold text-slate-600">岗位名称</label>
+            <label class="mt-4 block text-xs font-bold text-slate-600">召回搜索词</label>
+            <textarea v-model="search.search_terms_text" class="focus-ring mt-1 h-20 w-full resize-none rounded-md border border-slate-300 px-3 py-2 text-sm"></textarea>
+            <p class="mt-1 text-xs leading-5 text-slate-500">每个词都会在每个指定城市搜索。建议用宽词，例如“产品经理、企业服务产品经理、SaaS 产品经理”。</p>
+
+            <label class="mt-3 block text-xs font-bold text-slate-600">目标岗位方向</label>
             <textarea v-model="search.job_titles_text" class="focus-ring mt-1 h-20 w-full resize-none rounded-md border border-slate-300 px-3 py-2 text-sm"></textarea>
-            <p class="mt-1 text-xs leading-5 text-slate-500">标题不完全一致也会保留,只要 JD 里仍然命中相关方向。</p>
+            <p class="mt-1 text-xs leading-5 text-slate-500">用于评估，不是 Boss 的精确搜索词。标题不完全一致也会保留，只要真实 JD 命中相关方向或关键词。</p>
 
             <label class="mt-3 block text-xs font-bold text-slate-600">地点偏好</label>
             <input v-model="search.locations_text" class="focus-ring mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
@@ -395,8 +399,8 @@
 
             <div class="mt-3 grid grid-cols-[88px_1fr] gap-2">
               <div>
-                <label class="block text-xs font-bold text-slate-600">页数</label>
-                <input v-model.number="search.pages" type="number" min="1" max="10" class="focus-ring mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+                <label class="block text-xs font-bold text-slate-600">每城扫描页数</label>
+                <input v-model.number="search.pages" type="number" min="3" max="10" class="focus-ring mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
               </div>
               <div class="grid grid-cols-2 items-end gap-2">
                 <button class="collect-button focus-ring px-3 py-2 text-sm font-bold disabled:opacity-50" :disabled="busy" @click="runSearch">开始采集岗位</button>
@@ -636,6 +640,7 @@
             busy: false,
             extensionReady: false,
             search: {
+              search_terms_text: "产品经理, 企业服务产品经理, SaaS 产品经理",
               job_titles_text: "AI 产品经理",
               locations_text: "上海",
               jd_keywords_text: "AI, 智能体, 企业效率",
@@ -882,7 +887,10 @@
               queuedCandidates: 0
             };
             this.collectionEvents = [];
-            this.recordCollectionEvent("boss-search", "info", `已生成 ${taskTotal} 组搜索任务，等待扩展接管。`);
+            const pageLimit = Number(tasks?.page_limit || 3);
+            const truncated = Number(tasks?.truncated_task_count || 0);
+            this.recordCollectionEvent("boss-search", "info", `已生成 ${taskTotal} 组搜索任务，每组最多扫描 ${pageLimit} 页。`);
+            if (truncated > 0) this.recordCollectionEvent("boss-search", "error", `任务上限为 30 组，另有 ${truncated} 组未执行；请减少搜索词或城市后重试。`);
           },
           recordCollectionEvent(prefix, kind, message, payload = {}) {
             if (prefix !== "boss-search") return;
@@ -1162,6 +1170,7 @@
           },
           searchPayload() {
             return {
+              search_terms: this.searchTerms(),
               jd_keywords: this.jdKeywords(),
               job_titles: this.jobTitles(),
               locations: this.preferredLocations(),
@@ -1170,7 +1179,7 @@
               company_size_min: this.search.company_size_min,
               company_size_max: this.search.company_size_max,
               daily_recommendation_limit: this.search.daily_recommendation_limit,
-              pages: this.search.pages,
+              pages: Math.max(3, Math.min(Number(this.search.pages || 3), 10)),
               task_offset: Date.now()
             };
           },
@@ -1207,9 +1216,16 @@
               .map((item) => item.trim())
               .filter(Boolean);
           },
+          searchTerms() {
+            return this.search.search_terms_text
+              .split(/[,，、\n\r\t]+/)
+              .map((item) => item.trim())
+              .filter(Boolean);
+          },
           loadPreferences() {
             try {
               const stored = JSON.parse(localStorage.getItem("resumatch.workbench.preferences") || "{}");
+              this.search.search_terms_text = stored.search_terms_text || this.search.search_terms_text;
               this.search.job_titles_text = stored.job_titles_text || this.search.job_titles_text;
               this.search.jd_keywords_text = stored.jd_keywords_text || this.search.jd_keywords_text;
               this.search.locations_text = stored.locations_text || this.search.locations_text;
@@ -1218,7 +1234,7 @@
               this.search.company_size_min = stored.company_size_min || "";
               this.search.company_size_max = stored.company_size_max || "";
               this.search.daily_recommendation_limit = stored.daily_recommendation_limit || "20";
-              this.search.pages = Number(stored.pages || this.search.pages);
+              this.search.pages = Math.max(3, Number(stored.pages || this.search.pages));
               this.history.range = stored.history_range || "30";
               this.history.limit = Number(stored.history_limit || 200);
               this.history.start = stored.history_start || "";
@@ -1228,6 +1244,7 @@
           },
           savePreferences() {
             localStorage.setItem("resumatch.workbench.preferences", JSON.stringify({
+              search_terms_text: this.search.search_terms_text,
               job_titles_text: this.search.job_titles_text,
               jd_keywords_text: this.search.jd_keywords_text,
               locations_text: this.search.locations_text,
