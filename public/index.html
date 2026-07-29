@@ -122,6 +122,7 @@
         .collection-state-idle { background: #f1f5f9; color: #64748b; }
         .collection-state-running { background: #eff6ff; color: #2563eb; }
         .collection-state-completed { background: #ecfdf5; color: #059669; }
+        .collection-state-completed_with_warnings { background: #fff7ed; color: #c2410c; }
         .collection-state-failed { background: #fff1f2; color: #e11d48; }
         .collection-monitor-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin-top: 16px; }
         .collection-monitor-stat { border: 1px solid var(--line); border-radius: 10px; background: #fbfdff; padding: 10px; text-align: center; }
@@ -773,7 +774,11 @@
               const result = await this.runExtensionBridge("runBossSearch", tasks, "boss-search");
               this.searchSummary = result;
               this.rememberCurrentSearchBatch(result.search_batch_id);
-              this.finishCollectionMonitor("completed", "采集完成，工作台正在刷新候选队列。", result);
+              const monitorStatus = Number(result.failed_task_count || 0) > 0 ? "completed_with_warnings" : "completed";
+              const monitorMessage = monitorStatus === "completed"
+                ? "采集完成，工作台正在刷新候选队列。"
+                : `采集已结束，但有 ${result.failed_task_count} 组未完成；其余任务已继续执行。`;
+              this.finishCollectionMonitor(monitorStatus, monitorMessage, result);
               this.notice = `自动抓取完成:新保存 ${result.saved || 0} 个,已评估 ${result.queued_for_evaluation || 0} 个,进入候选 ${result.queued_candidates || 0} 个。`;
               await this.refreshAll();
             } catch (error) {
@@ -922,7 +927,7 @@
             this.recordCollectionEvent("boss-search", status === "completed" ? "success" : "error", message, payload);
           },
           collectionStateLabel() {
-            const labels = { idle: "等待采集", running: "采集中", completed: "本次完成", failed: "需要处理" };
+            const labels = { idle: "等待采集", running: "采集中", completed: "本次完成", completed_with_warnings: "完成，有异常", failed: "需要处理" };
             return labels[this.collectionRun.status] || labels.idle;
           },
           handleExtensionEvent(event) {
