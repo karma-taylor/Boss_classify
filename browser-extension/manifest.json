@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ResuMatch \u672c\u5730\u6c42\u804c\u52a9\u624b",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "\u628a Boss \u5c97\u4f4d\u548c\u56de\u590d\u540c\u6b65\u5230\u672c\u5730\u5de5\u4f5c\u53f0\u3002",
   "icons": {
     "16": "icons/icon-16.png",
