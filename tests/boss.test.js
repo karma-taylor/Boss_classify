@@ -31,13 +31,13 @@ test("buildSearchItems combines locations and job titles with a safe cap", () =>
   ]);
 });
 
-test("buildSearchItems accepts comma separated text and caps combinations", () => {
+test("buildSearchItems accepts comma separated text and caps combinations at thirty", () => {
   const items = buildSearchItems({
     job_titles: "AI产品,数据产品,CRM,SaaS,效率工具",
     jd_keywords: "AI,数据,CRM,SaaS,效率",
     locations: "上海,杭州,北京"
   });
-  assert.equal(items.length, 10);
+  assert.equal(items.length, 15);
   assert.equal(items[0].query, "AI产品");
   assert.equal(items[0].city_code, "101020100");
 });
@@ -50,6 +50,20 @@ test("buildBossSearchTasks keeps page limit within range", () => {
   });
   assert.equal(tasks.page_limit, 10);
   assert.equal(tasks.items.length, 1);
+});
+
+test("buildBossSearchTasks keeps at least three pages per city and reports task truncation", () => {
+  const tasks = buildBossSearchTasks({
+    search_terms: ["产品经理", "企业服务产品经理", "SaaS 产品经理", "AI 产品经理", "数据产品经理"],
+    job_titles: ["B端产品经理"],
+    locations: ["深圳", "上海", "北京", "广州", "杭州", "苏州", "成都"],
+    pages: 1
+  });
+  assert.equal(tasks.page_limit, 3);
+  assert.equal(tasks.items.length, 30);
+  assert.equal(tasks.requested_task_count, 35);
+  assert.equal(tasks.truncated_task_count, 5);
+  assert.deepEqual(tasks.filters.job_titles, ["B端产品经理"]);
 });
 
 test("Boss search URL uses city code when the location is known", () => {
