@@ -586,7 +586,7 @@
                 <div v-for="entry in filterLog.entries" :key="`${entry.source_url}-${entry.created_at}`" class="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-700">
                   <p class="font-bold text-slate-800">{{ entry.title || '未命名岗位' }}</p>
                   <p class="mt-1">{{ [entry.location || '地点未标注', entry.salary || '薪资未标注'].join(' · ') }}</p>
-                  <p class="mt-1 text-rose-700">{{ entry.reasons.map(filterReasonLabel).join('；') }}</p>
+                  <p v-for="reason in entry.reasons" :key="reason" class="mt-1 text-rose-700">{{ filterLogDetail(entry, reason) }}</p>
                 </div>
               </div>
             </details>
@@ -1128,6 +1128,19 @@
               salary_out_of_range: "薪资不在范围"
             };
             return labels[reason] || reason;
+          },
+          filterLogDetail(entry, reason) {
+            const detail = entry.reason_details || {};
+            if (reason === "title_or_keyword_miss") {
+              const direction = (detail.target_directions || []).join("、") || "未设置目标方向";
+              const keywords = (detail.jd_keywords || []).join("、") || "未设置 JD 关键词";
+              return `标题${detail.title_match ? "已命中" : "未命中"}目标方向；列表 JD 摘要${detail.keyword_match ? "已命中" : "未命中"}关键词。目标：${direction}；关键词：${keywords}`;
+            }
+            if (reason.startsWith("salary_")) {
+              const required = [detail.required_salary_min ? `${detail.required_salary_min}K 起` : "", detail.required_salary_max ? `${detail.required_salary_max}K 以下` : ""].filter(Boolean).join("，") || "未设置范围";
+              return `${this.filterReasonLabel(reason)}：岗位薪资 ${detail.job_salary || entry.salary || "未标注"}；设定范围 ${required}`;
+            }
+            return this.filterReasonLabel(reason);
           },
           softFlagText(summary) {
             return this.countText(summary?.soft_flag_counts || {}, {
