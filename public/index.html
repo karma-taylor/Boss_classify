@@ -108,6 +108,32 @@
         .history-details[open] > summary { border-bottom: 1px solid var(--line); }
         .history-details[open] > summary::after { content: "收起 ▴"; }
         .history-details-body { padding: 14px; }
+        .collection-monitor-panel { border-top-color: var(--mint) !important; }
+        .collection-state {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          border-radius: 999px;
+          padding: 6px 10px;
+          font-size: 12px;
+          font-weight: 800;
+        }
+        .collection-state::before { width: 7px; height: 7px; border-radius: 999px; background: currentColor; content: ""; }
+        .collection-state-idle { background: #f1f5f9; color: #64748b; }
+        .collection-state-running { background: #eff6ff; color: #2563eb; }
+        .collection-state-completed { background: #ecfdf5; color: #059669; }
+        .collection-state-failed { background: #fff1f2; color: #e11d48; }
+        .collection-monitor-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin-top: 16px; }
+        .collection-monitor-stat { border: 1px solid var(--line); border-radius: 10px; background: #fbfdff; padding: 10px; text-align: center; }
+        .collection-monitor-stat p:first-child { color: var(--muted); font-size: 11px; font-weight: 800; }
+        .collection-monitor-stat p:last-child { margin-top: 3px; color: var(--navy); font-size: 18px; font-weight: 900; }
+        .collection-event-list { display: grid; max-height: 250px; margin-top: 14px; overflow-y: auto; border: 1px solid var(--line); border-radius: 10px; background: #fbfdff; }
+        .collection-event { display: grid; grid-template-columns: 70px 1fr; gap: 10px; padding: 10px 12px; border-top: 1px solid #e8eef7; color: #334155; font-size: 12px; line-height: 1.5; }
+        .collection-event:first-child { border-top: 0; }
+        .collection-event time { color: #64748b; font-variant-numeric: tabular-nums; }
+        .collection-event-success { background: #f0fdf4; }
+        .collection-event-error { background: #fff7f7; color: #b91c1c; }
+        @media (max-width: 680px) { .collection-monitor-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
       input, textarea, select {
         border-color: #cbd5e1 !important;
         border-radius: 10px !important;
@@ -521,6 +547,34 @@
             </details>
           </section>
 
+          <section class="panel collection-monitor-panel p-4" aria-live="polite">
+            <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">collection monitor</p>
+                <h2 class="mt-1 text-2xl font-black">实时采集状态</h2>
+                <p class="mt-1 text-sm text-slate-500">显示本次采集在任务、翻页、筛选、导入或扩展通信中的停留位置。</p>
+              </div>
+              <span class="collection-state" :class="`collection-state-${collectionRun.status}`">{{ collectionStateLabel() }}</span>
+            </div>
+
+            <div class="collection-monitor-stats">
+              <div class="collection-monitor-stat"><p>当前任务</p><p>{{ collectionRun.currentTask || "-" }}/{{ collectionRun.taskTotal || "-" }}</p></div>
+              <div class="collection-monitor-stat"><p>已扫描页数</p><p>{{ collectionRun.pagesScanned }}</p></div>
+              <div class="collection-monitor-stat"><p>筛选保留</p><p>{{ collectionRun.kept }}</p></div>
+              <div class="collection-monitor-stat"><p>已过滤</p><p>{{ collectionRun.filteredOut }}</p></div>
+              <div class="collection-monitor-stat"><p>进入候选</p><p>{{ collectionRun.queuedCandidates }}</p></div>
+            </div>
+
+            <div v-if="collectionEvents.length" class="collection-event-list" aria-label="本次采集事件">
+              <div v-for="event in collectionEvents" :key="event.id" class="collection-event" :class="`collection-event-${event.kind}`">
+                <time>{{ event.at }}</time><p>{{ event.message }}</p>
+              </div>
+            </div>
+            <div v-else class="mt-4 rounded-md border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+              尚未开始采集。点击左侧“开始采集岗位”后，这里会实时显示每个步骤。
+            </div>
+          </section>
+
           <section v-if="dossier" class="panel p-4">
             <div class="flex items-start justify-between gap-4">
               <div>
@@ -568,6 +622,17 @@
             notice: "",
             historyNotice: "",
             searchSummary: null,
+            collectionRun: {
+              status: "idle",
+              taskTotal: 0,
+              currentTask: 0,
+              pagesScanned: 0,
+              kept: 0,
+              filteredOut: 0,
+              deduped: 0,
+              queuedCandidates: 0
+            },
+            collectionEvents: [],
             busy: false,
             extensionReady: false,
             search: {
@@ -699,12 +764,15 @@
                 method: "POST",
                 body: JSON.stringify(this.searchPayload())
               });
+              this.startCollectionMonitor(tasks);
               const result = await this.runExtensionBridge("runBossSearch", tasks, "boss-search");
               this.searchSummary = result;
               this.rememberCurrentSearchBatch(result.search_batch_id);
+              this.finishCollectionMonitor("completed", "采集完成，工作台正在刷新候选队列。", result);
               this.notice = `自动抓取完成:新保存 ${result.saved || 0} 个,已评估 ${result.queued_for_evaluation || 0} 个,进入候选 ${result.queued_candidates || 0} 个。`;
               await this.refreshAll();
             } catch (error) {
+              this.finishCollectionMonitor("failed", error.message || "采集失败。");
               this.notice = error.message;
             } finally {
               this.busy = false;
@@ -750,12 +818,14 @@
 
                 if (data.type === `${prefix}-accepted`) {
                   this.updateBridgeNotice(prefix, "扩展已接管任务,正在处理...");
+                  this.recordCollectionEvent(prefix, "info", "扩展已接管任务，正在准备 Boss 页面。");
                   resetTimer("扩展已接单,但后续处理超时了。请重试一次。", 90000);
                   return;
                 }
 
                 if (data.type === `${prefix}-progress`) {
                   this.updateBridgeNotice(prefix, data.payload?.message || "扩展正在处理...");
+                  this.recordCollectionEvent(prefix, "progress", data.payload?.message || "扩展正在处理...", data.payload || {});
                   resetTimer("扩展任务超时了。请检查 Boss 页面是否弹出登录、验证码或风控提示。", 90000);
                   return;
                 }
@@ -770,7 +840,9 @@
                 if (data.type === `${prefix}-error`) {
                   settled = true;
                   cleanup();
-                  reject(new Error(data.payload?.error || "扩展执行失败"));
+                  const message = data.payload?.error || "扩展执行失败";
+                  this.recordCollectionEvent(prefix, "error", message, data.payload || {});
+                  reject(new Error(message));
                 }
               };
 
@@ -796,6 +868,54 @@
             if (prefix === "reply-history") {
               this.historyNotice = message;
             }
+          },
+          startCollectionMonitor(tasks) {
+            const taskTotal = Array.isArray(tasks?.items) ? tasks.items.length : 0;
+            this.collectionRun = {
+              status: "running",
+              taskTotal,
+              currentTask: 0,
+              pagesScanned: 0,
+              kept: 0,
+              filteredOut: 0,
+              deduped: 0,
+              queuedCandidates: 0
+            };
+            this.collectionEvents = [];
+            this.recordCollectionEvent("boss-search", "info", `已生成 ${taskTotal} 组搜索任务，等待扩展接管。`);
+          },
+          recordCollectionEvent(prefix, kind, message, payload = {}) {
+            if (prefix !== "boss-search") return;
+            const metricMap = {
+              task_index: "currentTask",
+              task_total: "taskTotal",
+              pages_scanned: "pagesScanned",
+              kept: "kept",
+              filtered_out: "filteredOut",
+              deduped: "deduped",
+              queued_candidates: "queuedCandidates"
+            };
+            const next = { ...this.collectionRun };
+            for (const [source, target] of Object.entries(metricMap)) {
+              if (Number.isFinite(Number(payload[source]))) next[target] = Number(payload[source]);
+            }
+            this.collectionRun = next;
+            this.collectionEvents.unshift({
+              id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+              at: new Date().toLocaleTimeString("zh-CN", { hour12: false }),
+              kind,
+              message
+            });
+            this.collectionEvents = this.collectionEvents.slice(0, 30);
+          },
+          finishCollectionMonitor(status, message, payload = {}) {
+            if (this.collectionRun.status === "idle") return;
+            this.collectionRun = { ...this.collectionRun, status };
+            this.recordCollectionEvent("boss-search", status === "completed" ? "success" : "error", message, payload);
+          },
+          collectionStateLabel() {
+            const labels = { idle: "等待采集", running: "采集中", completed: "本次完成", failed: "需要处理" };
+            return labels[this.collectionRun.status] || labels.idle;
           },
           handleExtensionEvent(event) {
             if (event.source !== window) {
