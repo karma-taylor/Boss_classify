@@ -353,7 +353,7 @@ function collectReplyHistoryViaPort(tabId, requestId, payload, onProgress) {
 async function runBossSearchBatch(requestId, port, payload) {
   const tasks = Array.isArray(payload.items) ? payload.items : [];
   const options = payload.options || {};
-  const pageLimit = Math.max(1, Math.min(Number(payload.page_limit || options.pages || 3), 10));
+  const pageLimit = Math.max(3, Math.min(Number(payload.page_limit || options.pages || 3), 10));
   if (!tasks.length) throw new Error("\u6ca1\u6709\u53ef\u6267\u884c\u7684 Boss \u641c\u7d22\u4efb\u52a1\u3002");
 
   notifyWorkbench(port, "boss-search-progress", requestId, {
