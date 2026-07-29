@@ -94,6 +94,13 @@ test("background filters before enrichment and uses the reported detail link", (
   assert.match(backgroundScript, /await chrome\.tabs\.remove\(detailTab\.id\)/);
 });
 
+test("background normalizes Boss error pages and continues with later search tasks", () => {
+  assert.match(backgroundScript, /Frame with ID 0 is showing error page/);
+  assert.match(backgroundScript, /Boss 页面打开失败/);
+  assert.match(backgroundScript, /继续下一组/);
+  assert.match(backgroundScript, /failed_task_count/);
+});
+
 test("company size uses the company basic information card and identifies hunters", () => {
   assert.doesNotMatch(contentScript, /company_size: extractCompanySizeText\(card/);
   assert.match(contentScript, /function findCompanyBasicInfoCard/);
