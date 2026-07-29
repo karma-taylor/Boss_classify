@@ -12,7 +12,16 @@ async function checkWorkbenchReady() {
   setStatus(`正在连接本地工作台... 第 ${attempts} 次检查`);
 
   try {
-    const response = await fetch(versionUrl, { cache: "no-store" });
+    const { workbench_api_token: token } = await chrome.storage.local.get("workbench_api_token");
+    if (!token) {
+      setStatus("\u8bf7\u5148\u5728\u6269\u5c55\u5f39\u7a97\u4e2d\u586b\u5199\u5de5\u4f5c\u53f0 Token\u3002", true);
+      return;
+    }
+
+    const response = await fetch(versionUrl, {
+      cache: "no-store",
+      headers: { "X-Workbench-Token": token }
+    });
     if (!response.ok) {
       throw new Error("HTTP " + response.status);
     }

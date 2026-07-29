@@ -7,6 +7,7 @@ const contentScript = fs.readFileSync(path.join(process.cwd(), "browser-extensio
 const backgroundScript = fs.readFileSync(path.join(process.cwd(), "browser-extension", "background.js"), "utf8");
 const popupScript = fs.readFileSync(path.join(process.cwd(), "browser-extension", "popup.js"), "utf8");
 const telemetryScript = fs.readFileSync(path.join(process.cwd(), "browser-extension", "telemetry.js"), "utf8");
+const launcherScript = fs.readFileSync(path.join(process.cwd(), "browser-extension", "workbench-launcher.js"), "utf8");
 const manifest = JSON.parse(fs.readFileSync(path.join(process.cwd(), "browser-extension", "manifest.json"), "utf8"));
 
 test("telemetry is disabled by default and only accepts allowlisted anonymous properties", () => {
@@ -23,6 +24,9 @@ test("telemetry is disabled by default and only accepts allowlisted anonymous pr
   assert.match(contentScript, /type: "telemetry_event"/);
   assert.doesNotMatch(contentScript, /from "\.\/telemetry\.js"/);
   assert.ok(manifest.host_permissions.includes("https://us.i.posthog.com/*"));
+  assert.ok(manifest.permissions.includes("storage"));
+  assert.match(launcherScript, /chrome\.storage\.local\.get\("workbench_api_token"\)/);
+  assert.match(launcherScript, /X-Workbench-Token/);
 });
 
 test("extension keeps Boss attachment resume cards as inbound HR messages", () => {
