@@ -440,11 +440,32 @@ async function runBossSearchBatch(requestId, port, payload) {
           company_size_enrichment: companySizeEnrichment
         });
 
-        const hasNext = pageData.page?.hasNext && !pageData.page?.nextDisabled;
-        if (pageIndex >= pageLimit || !hasNext) break;
+        if (pageIndex >= pageLimit) {
+          notifyPageStop(port, requestId, index, tasks.length, pageIndex, "已达到每城扫描页数上限。");
+          break;
+        }
 
-        const next = await sendTabMessage(tab.id, { type: "goBossNextPage" });
-        if (!next?.ok || !next.hasNext) break;
+        const hasNext = pageData.page?.hasNext && !pageData.page?.nextDisabled;
+        if (hasNext) {
+          const next = await sendTabMessage(tab.id, { type: "goBossNextPage" });
+          if (next?.ok && next.hasNext) continue;
+          notifyPageStop(port, requestId, index, tasks.length, pageIndex, "下一页按钮未能完成翻页。");
+          break;
+        }
+
+        const fallback = await advanceBossPageByUrl(tab.id, pageIndex + 1, pageData.page?.firstJobUrl);
+        if (fallback.ok) {
+          notifyWorkbench(port, "boss-search-progress", requestId, {
+            phase: "page_fallback",
+            message: `第 ${index + 1}/${tasks.length} 组未识别到分页按钮，已通过链接切换到第 ${pageIndex + 1} 页。`,
+            task_index: index + 1,
+            task_total: tasks.length,
+            pages_scanned: pagesScanned
+          });
+          continue;
+        }
+        notifyPageStop(port, requestId, index, tasks.length, pageIndex, fallback.reason);
+        break;
       }
     } catch (error) {
       failedTaskCount += 1;
@@ -727,6 +748,40 @@ function normalizeChannelError(message) {
 
 function normalizeSearchTaskError(error) {
   return normalizeChannelError(String(error?.message || error || "采集任务失败"));
+}
+
+function notifyPageStop(port, requestId, taskIndex, taskTotal, pageIndex, reason) {
+  notifyWorkbench(port, "boss-search-progress", requestId, {
+    phase: "page_stop",
+    message: `第 ${taskIndex + 1}/${taskTotal} 组在第 ${pageIndex} 页停止：${reason}`,
+    task_index: taskIndex + 1,
+    task_total: taskTotal
+  });
+}
+
+async function advanceBossPageByUrl(tabId, nextPage, previousFirstJob) {
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    const url = new URL(tab.url || "");
+    if (!/^https:\/\/www\.zhipin\.com\//.test(url.href)) {
+      return { ok: false, reason: "当前不是可翻页的 Boss 搜索页面。" };
+    }
+    url.searchParams.set("page", String(nextPage));
+    await chrome.tabs.update(tabId, { url: url.toString() });
+    await waitForTabComplete(tabId);
+    await ensureContentScript(tabId);
+    const probe = await sendTabMessage(tabId, { type: "collectBossJobs" });
+    const nextFirstJob = probe?.page?.firstJobUrl || probe?.jobs?.[0]?.source_url || "";
+    if (!probe?.ok || !nextFirstJob) {
+      return { ok: false, reason: "Boss 未返回下一页岗位。" };
+    }
+    if (previousFirstJob && nextFirstJob === previousFirstJob) {
+      return { ok: false, reason: "Boss 未切换到下一页（链接翻页未生效）。" };
+    }
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, reason: normalizeSearchTaskError(error) };
+  }
 }
 
 async function waitForTabComplete(tabId) {
