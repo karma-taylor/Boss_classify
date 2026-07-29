@@ -85,11 +85,29 @@
       main > aside > .panel:nth-child(2) { border-top: 4px solid var(--amber); }
       main > section > .panel { border-top: 4px solid var(--navy); }
       main > section > .panel:nth-of-type(3) { border-top-color: var(--mint); }
-      .history-run-list {
-        max-height: 460px;
-        overflow-y: auto;
-        padding-right: 4px;
-      }
+        .history-details {
+          margin-top: 14px;
+          border: 1px solid var(--line);
+          border-radius: 12px;
+          background: #fbfdff;
+        }
+        .history-details > summary {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          min-height: 46px;
+          padding: 0 14px;
+          cursor: pointer;
+          color: #334155;
+          font-size: 13px;
+          font-weight: 800;
+          list-style: none;
+        }
+        .history-details > summary::-webkit-details-marker { display: none; }
+        .history-details > summary::after { content: "展开 ▾"; color: var(--blue); }
+        .history-details[open] > summary { border-bottom: 1px solid var(--line); }
+        .history-details[open] > summary::after { content: "收起 ▴"; }
+        .history-details-body { padding: 14px; }
       input, textarea, select {
         border-color: #cbd5e1 !important;
         border-radius: 10px !important;
@@ -455,7 +473,17 @@
               </div>
             </div>
 
-            <div class="mt-4 grid gap-3 lg:grid-cols-4">
+            <div class="mt-4 grid grid-cols-2 gap-2 text-center md:grid-cols-4">
+              <div class="rounded-md bg-slate-100 p-3"><p class="text-[11px] font-bold text-slate-500">投递数</p><p class="mt-1 text-2xl font-black">{{ historySummary.applied_count || 0 }}</p></div>
+              <div class="rounded-md bg-slate-100 p-3"><p class="text-[11px] font-bold text-slate-500">有回复</p><p class="mt-1 text-2xl font-black">{{ historySummary.reply_count || 0 }}</p></div>
+              <div class="rounded-md bg-slate-100 p-3"><p class="text-[11px] font-bold text-slate-500">索简历</p><p class="mt-1 text-2xl font-black">{{ historySummary.resume_request_count || 0 }}</p></div>
+              <div class="rounded-md bg-slate-100 p-3"><p class="text-[11px] font-bold text-slate-500">邀面</p><p class="mt-1 text-2xl font-black">{{ historySummary.interview_count || 0 }}</p></div>
+            </div>
+
+            <details class="history-details">
+              <summary class="focus-ring">展开筛选与按天明细</summary>
+              <div class="history-details-body">
+            <div class="grid gap-3 lg:grid-cols-4">
               <label class="block text-xs font-bold text-slate-600">时间范围
                 <select v-model="history.range" @change="handleHistoryFilterChange" class="focus-ring mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
                   <option value="7">近 7 天</option><option value="30">近 30 天</option><option value="90">近 90 天</option><option value="custom">自定义</option>
@@ -473,13 +501,6 @@
             </div>
             <label class="mt-3 flex items-center gap-2 text-xs font-bold text-slate-600"><input v-model="history.includeSupplement" @change="handleHistoryFilterChange" type="checkbox" />统计里包含补录会话</label>
 
-            <div class="mt-4 grid grid-cols-2 gap-2 text-center md:grid-cols-4">
-              <div class="rounded-md bg-slate-100 p-3"><p class="text-[11px] font-bold text-slate-500">投递数</p><p class="mt-1 text-2xl font-black">{{ historySummary.applied_count || 0 }}</p></div>
-              <div class="rounded-md bg-slate-100 p-3"><p class="text-[11px] font-bold text-slate-500">有回复</p><p class="mt-1 text-2xl font-black">{{ historySummary.reply_count || 0 }}</p></div>
-              <div class="rounded-md bg-slate-100 p-3"><p class="text-[11px] font-bold text-slate-500">索简历</p><p class="mt-1 text-2xl font-black">{{ historySummary.resume_request_count || 0 }}</p></div>
-              <div class="rounded-md bg-slate-100 p-3"><p class="text-[11px] font-bold text-slate-500">邀面</p><p class="mt-1 text-2xl font-black">{{ historySummary.interview_count || 0 }}</p></div>
-            </div>
-
             <div class="mt-3 rounded-md border p-3 text-xs leading-5" :class="historyCoverage.status === 'complete' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-amber-200 bg-amber-50 text-amber-800'">
               <strong>{{ historyCoverage.status === 'complete' ? '\u5df2\u5b8c\u6574\u8986\u76d6' : '\u90e8\u5206\u8986\u76d6' }}</strong>
               <span v-if="historyCoverage.earliest_covered_at">: {{ formatDateTime(historyCoverage.earliest_covered_at) }}</span>
@@ -496,6 +517,8 @@
               </table></div>
             </div>
             <p v-if="historyNotice" class="mt-3 rounded-md bg-slate-100 px-3 py-2 text-xs leading-5 text-slate-700">{{ historyNotice }}</p>
+              </div>
+            </details>
           </section>
 
           <section v-if="dossier" class="panel p-4">
