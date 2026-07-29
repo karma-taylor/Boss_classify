@@ -194,7 +194,22 @@ export function analyzeJobFilters(job, filters = {}) {
   }
 
   softFlags.push(...analyzeCompanySizePreference(job, filters));
-  return { passed: intentOk && salaryOk, reasons, soft_flags: softFlags };
+  return {
+    passed: intentOk && salaryOk,
+    reasons,
+    soft_flags: softFlags,
+    details: {
+      title_match: titleOk,
+      keyword_match: keywordOk,
+      salary_match: salaryOk,
+      job_salary: String(job.salary || "").slice(0, 120),
+      parsed_salary: salaryRange,
+      required_salary_min: filters.salary_min || null,
+      required_salary_max: filters.salary_max || null,
+      target_directions: (filters.job_titles || []).slice(0, 10),
+      jd_keywords: (filters.jd_keywords || []).slice(0, 10)
+    }
+  };
 }
 
 export function passesFilters(job, filters = {}) {
