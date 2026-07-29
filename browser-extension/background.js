@@ -1,6 +1,7 @@
 import { trackDailyLaunch, trackEvent } from "./telemetry.js";
 
 const IMPORT_URL = "http://127.0.0.1:8788/api/jobs/import";
+const FILTER_LOG_URL = "http://127.0.0.1:8788/api/collection/filter-logs";
 const MESSAGE_SYNC_URL = "http://127.0.0.1:8788/api/boss/messages/sync";
 const MESSAGE_HISTORY_SYNC_URL = "http://127.0.0.1:8788/api/boss/messages/history-sync";
 const REPLY_SUMMARY_URL = "http://127.0.0.1:8788/api/replies/summary";
@@ -372,6 +373,7 @@ async function runBossSearchBatch(requestId, port, payload) {
   let notRecommendedCount = 0;
   let failedTaskCount = 0;
   const filteredReasonCounts = {};
+  const filteredJobLogs = [];
   const softFlagCounts = {};
   const companySizeEnrichment = createCompanySizeEnrichmentSummary();
   const citySummary = createCitySummary(tasks);
@@ -404,6 +406,7 @@ async function runBossSearchBatch(requestId, port, payload) {
           const filterResult = analyzeJobFilters(job, task.filters || {}, { includeCompanySize: false });
           if (!filterResult.passed) {
             addCounts(filteredReasonCounts, filterResult.reasons);
+            filteredJobLogs.push(toFilterLogEntry(job, filterResult.reasons));
             filteredOut += 1;
             continue;
           }
@@ -500,6 +503,15 @@ async function runBossSearchBatch(requestId, port, payload) {
 
   let saved = 0;
   let queued = 0;
+  let filterLogRecorded = 0;
+  try {
+    filterLogRecorded = await recordFilterLogs(requestId, filteredJobLogs);
+  } catch (error) {
+    notifyWorkbench(port, "boss-search-progress", requestId, {
+      phase: "filter_log_error",
+      message: `筛选日志写入失败：${normalizeSearchTaskError(error)}`
+    });
+  }
   for (const chunk of chunkArray(collectedJobs, 100)) {
     const imported = await importJobs(chunk, {
       ...options,
@@ -532,6 +544,7 @@ async function runBossSearchBatch(requestId, port, payload) {
     pages_scanned: pagesScanned,
     tasks_run: tasks.length,
     filtered_reason_counts: filteredReasonCounts,
+    filter_log_recorded: filterLogRecorded,
     soft_flag_counts: softFlagCounts,
     company_size_missing_count: softFlagCounts.company_size_missing || 0,
     company_size_enrichment: companySizeEnrichment,
@@ -744,6 +757,29 @@ function normalizeChannelError(message) {
     return "Boss 页面通信中断,通常是页面刷新、跳转或内容脚本失效导致的,请重试。";
   }
   return message;
+}
+
+async function recordFilterLogs(searchBatchId, entries) {
+  let recorded = 0;
+  for (const chunk of chunkArray(entries, 300)) {
+    const result = await fetchJson(FILTER_LOG_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ search_batch_id: searchBatchId, items: chunk })
+    });
+    recorded += Number(result.recorded || 0);
+  }
+  return recorded;
+}
+
+function toFilterLogEntry(job, reasons) {
+  return {
+    source_url: String(job?.source_url || ""),
+    title: String(job?.title || ""),
+    salary: String(job?.salary || ""),
+    location: String(job?.location || ""),
+    reasons: Array.isArray(reasons) ? reasons : []
+  };
 }
 
 function normalizeSearchTaskError(error) {
